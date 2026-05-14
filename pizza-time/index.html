@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
+  <meta name="theme-color" content="#00b98e">
+  <meta name="description" content="Pizza Time — Livraison express à N'Djamena en 30 min. Pizzas, tacos, burgers, desserts.">
+  <title>Pizza Time — N'Djamena</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="https://api.iconify.design/twemoji/pizza.svg">
+  <link rel="apple-touch-icon" href="https://api.iconify.design/twemoji/pizza.svg">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <style>
+    body { font-family: 'DM Sans', sans-serif; background: #0f0f1e; }
+    .heading-font { font-family: 'Playfair Display', serif; }
+    .cat-scroll::-webkit-scrollbar { display: none; }
+    .cat-scroll { scrollbar-width: none; }
+    .product-card { transition: transform .25s, box-shadow .25s; }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,185,142,.15); }
+    .cart-drawer { transition: transform .35s cubic-bezier(.4,0,.2,1); }
+    .cart-drawer.closed { transform: translateX(100%); }
+    .toast { animation: slideUp .3s ease; }
+    @keyframes slideUp { from{opacity:0;transform:translate(-50%,20px)} to{opacity:1;transform:translate(-50%,0)} }
+    .glow { box-shadow: 0 0 20px rgba(0,185,142,.3); }
+    #tracking-map { height: 100%; width: 100%; }
+    .courier-marker {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: #00b98e; border: 3px solid white;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; animation: pulse 2s infinite;
+      transition: transform .8s linear;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 4px 12px rgba(0,0,0,.4), 0 0 0 0 rgba(0,185,142,.6); }
+      50% { box-shadow: 0 4px 12px rgba(0,0,0,.4), 0 0 0 14px rgba(0,185,142,0); }
+    }
+    .pin-marker { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+    .pin-marker span { transform: rotate(45deg); font-size: 14px; }
+    .pin-shop { background: #f97316; }
+    .pin-home { background: #ef4444; }
+    .timeline-step { position: relative; flex: 1; text-align: center; }
+    .timeline-step::before { content: ''; position: absolute; top: 12px; left: 50%; right: -50%; height: 2px; background: rgba(255,255,255,.1); }
+    .timeline-step:last-child::before { display: none; }
+    .timeline-step.done::before { background: #00b98e; }
+    .timeline-dot { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.2); display: inline-flex; align-items: center; justify-content: center; position: relative; z-index: 1; transition: all .3s; }
+    .timeline-step.active .timeline-dot { background: #00b98e; border-color: #00b98e; box-shadow: 0 0 0 4px rgba(0,185,142,.2); }
+    .timeline-step.done .timeline-dot { background: #00b98e; border-color: #00b98e; }
+    .timeline-step.done .timeline-dot::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
+  </style>
+</head>
+<body class="text-white min-h-screen">
+
+  <header class="sticky top-0 z-40 backdrop-blur-xl bg-[#1a1a2e]/95 border-b border-white/5">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <h1 class="heading-font text-2xl font-black text-[#00b98e]">Pizza Time 🍕</h1>
+      <nav class="hidden sm:flex gap-5">
+        <button data-tab="menu" class="nav-tab text-sm font-medium">Menu</button>
+        <button data-tab="orders" class="nav-tab text-sm font-medium text-white/50">Mes commandes</button>
+        <button data-tab="admin" class="nav-tab text-sm font-medium text-white/50">Admin</button>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button id="install-btn" class="hidden text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10">📲 Installer</button>
+        <button id="cart-toggle" class="relative p-2">
+          <i data-lucide="shopping-bag" class="w-6 h-6 text-[#00b98e]"></i>
+          <span id="cart-badge" class="absolute -top-0.5 -right-0.5 bg-red-500 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center hidden">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="sm:hidden flex justify-center gap-4 pb-2">
+      <button data-tab="menu" class="nav-tab text-xs font-medium">Menu</button>
+      <button data-tab="orders" class="nav-tab text-xs font-medium text-white/50">Mes commandes</button>
+      <button data-tab="admin" class="nav-tab text-xs font-medium text-white/50">Admin</button>
+    </div>
+  </header>
+
+  <section class="bg-gradient-to-br from-[#1a1a2e] to-[#232347] py-12 text-center px-4">
+    <h2 class="heading-font text-3xl md:text-5xl font-black mb-2">Livré chez vous en 30 min 🚀</h2>
+    <p class="text-white/60">Pizza Time · N'Djamena, Tchad 🇹🇩 · Paiement à la livraison</p>
+  </section>
+
+  <main class="max-w-6xl mx-auto px-4 py-8">
+
+    <section id="section-menu">
+      <div class="relative max-w-md mb-5">
+        <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4"></i>
+        <input id="search-input" type="text" placeholder="Rechercher un plat..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/40 focus:outline-none focus:border-[#00b98e]">
+      </div>
+      <div id="category-bar" class="cat-scroll flex gap-3 overflow-x-auto pb-4 mb-6"></div>
+      <p id="no-results" class="hidden text-white/40 text-center py-8 text-sm">Aucun résultat trouvé</p>
+      <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+    </section>
+
+    <section id="section-orders" class="hidden">
+      <h2 class="heading-font text-2xl font-bold mb-6 text-center">Mes commandes</h2>
+      <p id="no-orders" class="text-white/40 text-center py-8 text-sm hidden">Aucune commande pour le moment.</p>
+      <div id="order-list" class="space-y-3"></div>
+    </section>
+
+    <section id="section-admin" class="hidden">
+      <div id="admin-locked" class="max-w-md mx-auto bg-[#232347] border border-white/5 rounded-2xl p-8 text-center">
+        <div class="text-5xl mb-4">🔒</div>
+        <h2 class="text-xl font-bold mb-2">Espace Admin</h2>
+        <p class="text-white/60 text-sm mb-5">Accès restreint au personnel</p>
+        <input id="admin-pwd" type="password" placeholder="Mot de passe" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:border-[#00b98e]">
+        <button id="admin-login" class="w-full py-3 rounded-full bg-[#00b98e] font-bold hover:bg-[#00a67d] glow">Se connecter</button>
+        <p id="admin-err" class="text-red-400 text-xs mt-3 hidden">Mot de passe incorrect</p>
+        <p class="text-white/30 text-[10px] mt-4">Démo : <code>admin1234</code></p>
+      </div>
+      <div id="admin-panel" class="hidden">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="heading-font text-2xl font-bold">Dashboard Admin</h2>
+          <button id="admin-logout" class="text-xs px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10">Déconnexion</button>
+        </div>
+        <div id="admin-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6"></div>
+        <div id="admin-orders" class="space-y-3"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="cart-backdrop" class="fixed inset-0 bg-black/70 z-40 hidden"></div>
+  <aside id="cart-drawer" class="cart-drawer closed fixed top-0 right-0 h-full w-full max-w-sm bg-[#1a1a2e] z-50 flex flex-col border-l border-[#00b98e]/10">
+    <div class="flex items-center justify-between p-5 border-b border-white/10">
+      <h3 class="font-bold text-lg">Votre panier 🛒</h3>
+      <button id="cart-close" class="text-white/60 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+
+    <div id="cart-view" class="flex-1 flex flex-col">
+      <div id="cart-items" class="flex-1 overflow-y-auto p-5 space-y-3"></div>
+      <div class="p-5 border-t border-white/10">
+        <div class="flex justify-between text-white/60 text-sm mb-2"><span>Sous-total</span><span id="cart-subtotal">0 FCFA</span></div>
+        <div class="flex justify-between text-white/60 text-sm mb-2"><span>Livraison</span><span>1 000 FCFA</span></div>
+        <div class="flex justify-between font-bold text-lg mb-4"><span>Total</span><span id="cart-total">0 FCFA</span></div>
+        <p class="text-white/40 text-xs text-center mb-3">💵 Paiement à la livraison</p>
+        <button id="checkout-btn" class="w-full py-3 rounded-full bg-[#00b98e] font-bold hover:bg-[#00a67d] glow disabled:opacity-40 disabled:cursor-not-allowed" disabled>Commander 🚀</button>
+      </div>
+    </div>
+
+    <div id="checkout-view" class="hidden flex-1 flex flex-col">
+      <div class="flex items-center gap-3 p-5 border-b border-white/10">
+        <button id="checkout-back" class="text-white/60 hover:text-white"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+        <h3 class="font-bold text-lg">Finaliser</h3>
+      </div>
+      <form id="order-form" class="flex-1 overflow-y-auto p-5 space-y-4">
+        <div>
+          <label class="block mb-1 text-white/70 text-sm" for="inp-name">Votre nom</label>
+          <input id="inp-name" type="text" required minlength="2" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#00b98e]">
+        </div>
+        <div>
+          <label class="block mb-1 text-white/70 text-sm" for="inp-phone">Téléphone (Tchad)</label>
+          <div class="flex gap-2">
+            <span class="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white/60">+235</span>
+            <input id="inp-phone" type="tel" required placeholder="66 12 34 56" maxlength="11" class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#00b98e]">
+          </div>
+          <p id="phone-hint" class="text-white/40 text-xs mt-1">Format : 8 chiffres commençant par 6, 7 ou 9</p>
+        </div>
+        <div>
+          <label class="block mb-1 text-white/70 text-sm" for="inp-address">Adresse de livraison</label>
+          <input id="inp-address" type="text" required class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#00b98e]">
+        </div>
+        <button type="button" id="geo-btn" class="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2.5 rounded-xl text-[#00b98e] text-sm font-medium hover:bg-white/10">
+          <i data-lucide="map-pin" class="w-4 h-4"></i> Utiliser ma position GPS
+        </button>
+        <p id="geo-status" class="text-xs text-white/50"></p>
+        <input type="hidden" id="inp-lat"><input type="hidden" id="inp-lng">
+
+        <div class="bg-white/5 border border-white/10 rounded-xl p-4">
+          <p class="text-white/60 text-xs font-medium mb-2">Résumé</p>
+          <div id="checkout-summary" class="text-white/80 text-sm space-y-1"></div>
+          <div class="border-t border-white/10 mt-3 pt-3 flex justify-between font-bold"><span>Total</span><span id="checkout-total"></span></div>
+          <p class="text-white/40 text-[11px] text-center mt-2">💵 À régler au livreur</p>
+        </div>
+
+        <p id="form-error" class="text-red-400 text-sm text-center hidden"></p>
+        <button type="submit" id="submit-btn" class="w-full py-3 rounded-full bg-[#00b98e] font-bold hover:bg-[#00a67d] glow">Confirmer 🚀</button>
+      </form>
+      <div id="order-success" class="hidden flex-1 flex flex-col items-center justify-center p-5">
+        <div class="text-6xl mb-4">🎉</div>
+        <p class="text-lg font-semibold text-green-400">Commande confirmée !</p>
+        <p class="text-sm text-white/50 mt-2 text-center">Suivez votre livraison en temps réel.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div id="tracking-screen" class="fixed inset-0 z-[70] hidden bg-[#0f0f1e]">
+    <div id="tracking-map" class="absolute inset-0"></div>
+    <div class="absolute top-0 left-0 right-0 z-10 p-4 flex items-center gap-3 bg-gradient-to-b from-black/60 to-transparent">
+      <button id="tracking-close" class="w-10 h-10 rounded-full bg-white/95 text-gray-800 flex items-center justify-center shadow-lg">
+        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+      </button>
+      <div class="bg-white/95 text-gray-800 px-4 py-2 rounded-full text-sm font-semibold shadow-lg flex items-center gap-2 flex-1">
+        <span class="w-2 h-2 rounded-full bg-[#00b98e] animate-pulse"></span>
+        <span id="tracking-eta">Calcul...</span>
+      </div>
+    </div>
+    <div class="absolute bottom-0 left-0 right-0 z-10 bg-[#1a1a2e] rounded-t-3xl shadow-2xl p-6 max-h-[55%] overflow-y-auto">
+      <div class="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4"></div>
+      <div class="flex justify-between mb-5">
+        <div class="timeline-step" data-step="0"><div class="timeline-dot"></div><p class="text-[10px] text-white/60 mt-1">Confirmée</p></div>
+        <div class="timeline-step" data-step="1"><div class="timeline-dot"></div><p class="text-[10px] text-white/60 mt-1">Préparation</p></div>
+        <div class="timeline-step" data-step="2"><div class="timeline-dot"></div><p class="text-[10px] text-white/60 mt-1">En route</p></div>
+        <div class="timeline-step" data-step="3"><div class="timeline-dot"></div><p class="text-[10px] text-white/60 mt-1">Livrée</p></div>
+      </div>
+      <h3 id="tracking-title" class="text-xl font-bold mb-1"></h3>
+      <p id="tracking-subtitle" class="text-white/60 text-sm mb-4"></p>
+      <div id="cancel-block" class="hidden mb-4">
+        <button id="cancel-order-btn" class="w-full py-2.5 rounded-xl bg-red-500/20 text-red-400 text-sm font-semibold hover:bg-red-500/30">Annuler la commande</button>
+      </div>
+      <div class="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-[#00b98e] to-emerald-600 flex items-center justify-center text-xl font-bold">M</div>
+        <div class="flex-1">
+          <p class="font-semibold text-sm">Mahamat A.</p>
+          <p class="text-white/50 text-xs">⭐ 4.8 · Moto · TD 1234 AB</p>
+        </div>
+        <a href="tel:+23566000000" class="w-10 h-10 rounded-full bg-[#00b98e]/20 text-[#00b98e] flex items-center justify-center"><i data-lucide="phone" class="w-4 h-4"></i></a>
+      </div>
+      <div id="tracking-order" class="bg-white/5 border border-white/10 rounded-2xl p-4 text-sm"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm font-semibold shadow-xl z-[80] hidden toast"></div>
+
+  <script>
+    const DELIVERY_FEE = 1000;
+    const RESTAURANT = { lat: 12.1348, lng: 15.0557, name: "Pizza Time" };
+    const SIM_DURATION_MS = 60000;
+    const PREP_RATIO = 0.30;
+    const PHONE_REGEX = /^[679]\d{7}$/;
+    const ADMIN_PASSWORD = 'admin1234';
+    const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+
+    const CATEGORIES = [
+      { id: 'all', label: '🔥 Tout' }, { id: 'pizzas', label: '🍕 Pizzas' },
+      { id: 'tacos', label: '🌮 Tacos' }, { id: 'burgers', label: '🍔 Burgers' },
+      { id: 'sides', label: '🍟 Sides' }, { id: 'desserts', label: '🍨 Desserts' },
+      { id: 'boissons', label: '🥤 Boissons' },
+    ];
+
+    const MENU = [
+      { id:'margherita', cat:'pizzas', name:'Pizza Margherita', price:4500, badge:'POPULAIRE', img:'https://images.pexels.com/photos/13463104/pexels-photo-13463104.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'pepperoni', cat:'pizzas', name:'Pizza Pepperoni', price:5500, img:'https://images.pexels.com/photos/708587/pexels-photo-708587.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'4fromages', cat:'pizzas', name:'Quatre Fromages', price:6000, img:'https://images.pexels.com/photos/33458021/pexels-photo-33458021.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'royale', cat:'pizzas', name:'Pizza Royale', price:6500, badge:'CHEF', img:'https://images.pexels.com/photos/19786214/pexels-photo-19786214.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'bbq', cat:'pizzas', name:'Pizza BBQ Chicken', price:6000, badge:'NEW', img:'https://images.pexels.com/photos/33458051/pexels-photo-33458051.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'tacos-poulet', cat:'tacos', name:'Tacos Poulet', price:3500, img:'https://images.pexels.com/photos/7041784/pexels-photo-7041784.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'tacos-boeuf', cat:'tacos', name:'Tacos Bœuf', price:4000, img:'https://images.pexels.com/photos/4958641/pexels-photo-4958641.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'tacos-mixte', cat:'tacos', name:'Tacos Mixte', price:4500, badge:'BEST', img:'https://images.pexels.com/photos/4958529/pexels-photo-4958529.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'burger', cat:'burgers', name:'Burger Classic', price:4000, img:'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'burger-double', cat:'burgers', name:'Double Smash', price:5500, badge:'BEST', img:'https://images.pexels.com/photos/29250659/pexels-photo-29250659.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'burger-chicken', cat:'burgers', name:'Chicken Burger', price:4500, img:'https://images.pexels.com/photos/8130749/pexels-photo-8130749.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'frites', cat:'sides', name:'Frites', price:1500, img:'https://images.pexels.com/photos/1583884/pexels-photo-1583884.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'nuggets', cat:'sides', name:'Nuggets (8 pcs)', price:2500, img:'https://images.pexels.com/photos/10183543/pexels-photo-10183543.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'salade', cat:'sides', name:'Salade César', price:3000, img:'https://images.pexels.com/photos/2097090/pexels-photo-2097090.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'tiramisu', cat:'desserts', name:'Tiramisu', price:2500, img:'https://images.pexels.com/photos/6880219/pexels-photo-6880219.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'brownie', cat:'desserts', name:'Brownie Chocolat', price:2000, img:'https://images.pexels.com/photos/33312980/pexels-photo-33312980.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'cheesecake', cat:'desserts', name:'Cheesecake', price:3000, img:'https://images.pexels.com/photos/15030594/pexels-photo-15030594.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'coca', cat:'boissons', name:'Coca-Cola', price:1000, img:'https://images.pexels.com/photos/8879622/pexels-photo-8879622.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'fanta', cat:'boissons', name:'Fanta', price:1000, img:'https://images.pexels.com/photos/12987268/pexels-photo-12987268.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'jus', cat:'boissons', name:"Jus d'Orange", price:1200, img:'https://images.pexels.com/photos/158053/fresh-orange-juice-squeezed-refreshing-citrus-158053.jpeg?auto=compress&cs=tinysrgb&w=600' },
+      { id:'eau', cat:'boissons', name:'Eau Minérale', price:500, img:'https://images.pexels.com/photos/327090/pexels-photo-327090.jpeg?auto=compress&cs=tinysrgb&w=600' },
+    ];
+    const MENU_BY_ID = Object.fromEntries(MENU.map(m => [m.id, m]));
+
+    const cart = JSON.parse(localStorage.getItem('pizzatime_cart') || '{}');
+    let allOrders = [];
+    let currentCat = 'all', currentSearch = '';
+    let trackingMap = null, courierMarker = null, routeLine = null, routeCoords = [];
+    let trackingRAF = null, trackingStart = null, trackingOrder = null;
+    let isAdmin = sessionStorage.getItem('pizzatime_admin') === '1';
+
+    const store = {
+      _key: 'pizzatime_orders', _handler: null,
+      async init(handler) {
+        this._handler = handler;
+        const data = JSON.parse(localStorage.getItem(this._key) || '[]');
+        handler.onDataChanged(data);
+        window.addEventListener('storage', e => {
+          if (e.key === this._key) {
+            const newData = JSON.parse(e.newValue || '[]');
+            handler.onDataChanged(newData);
+          }
+        });
+        return { isOk: true };
+      },
+      async create(record) {
+        try {
+          const data = JSON.parse(localStorage.getItem(this._key) || '[]');
+          record.__backendId = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+          data.push(record);
+          localStorage.setItem(this._key, JSON.stringify(data));
+          this._handler?.onDataChanged(data);
+          return { isOk: true, data: record };
+        } catch (e) { return { isOk: false, error: e.message }; }
+      },
+      async update(record) {
+        try {
+          const data = JSON.parse(localStorage.getItem(this._key) || '[]');
+          const idx = data.findIndex(r => r.__backendId === record.__backendId);
+          if (idx >= 0) data[idx] = record;
+          localStorage.setItem(this._key, JSON.stringify(data));
+          this._handler?.onDataChanged(data);
+          return { isOk: true, data: record };
+        } catch (e) { return { isOk: false, error: e.message }; }
+      },
+    };
+
+    const $ = id => document.getElementById(id);
+    const fmt = n => n.toLocaleString('fr-FR') + ' FCFA';
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const persistCart = () => localStorage.setItem('pizzatime_cart', JSON.stringify(cart));
+
+    function toast(msg, type='success') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = `fixed bottom-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm font-semibold shadow-xl z-[80] toast ${
+        type === 'error' ? 'bg-red-500' : 'bg-[#00b98e]'
+      } text-white`;
+      t.classList.remove('hidden');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => t.classList.add('hidden'), 2500);
+    }
+
+    function divIcon(cls, html, anchor) {
+      return L.divIcon({ html, className: '', iconSize: cls === 'courier-marker' ? [44,44] : [32,32], iconAnchor: anchor || (cls === 'courier-marker' ? [22,22] : [16,32]) });
+    }
+
+    function bearing(a, b) {
+      const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+      const dLng = toRad(b[1] - a[1]);
+      const y = Math.sin(dLng) * Math.cos(toRad(b[0]));
+      const x = Math.cos(toRad(a[0])) * Math.sin(toRad(b[0])) - Math.sin(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.cos(dLng);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function renderCategories() {
+      $('category-bar').innerHTML = CATEGORIES.map(c =>
+        `<button data-cat="${c.id}" class="cat-pill shrink-0 px-4 py-2 rounded-full text-sm font-medium border transition">${c.label}</button>`
+      ).join('');
+      updateCategoryStyles();
+    }
+    function updateCategoryStyles() {
+      document.querySelectorAll('.cat-pill').forEach(b => {
+        const active = b.dataset.cat === currentCat;
+        b.className = `cat-pill shrink-0 px-4 py-2 rounded-full text-sm font-medium border transition ${
+          active ? 'bg-[#00b98e] text-white border-[#00b98e] shadow-lg' : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10'
+        }`;
+      });
+    }
+    function renderMenu() {
+      const q = currentSearch.toLowerCase();
+      const filtered = MENU.filter(m =>
+        (currentCat === 'all' || m.cat === currentCat) &&
+        (!q || m.name.toLowerCase().includes(q))
+      );
+      $('no-results').classList.toggle('hidden', filtered.length > 0);
+      $('menu-grid').innerHTML = filtered.map(m => `
+        <div class="product-card rounded-2xl overflow-hidden bg-[#232347] border border-white/5">
+          <div class="relative">
+            <img class="w-full h-36 object-cover" loading="lazy" src="${esc(m.img)}" alt="${esc(m.name)}">
+            ${m.badge ? `<span class="absolute top-2 left-2 bg-[#00b98e] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${esc(m.badge)}</span>` : ''}
+          </div>
+          <div class="p-3">
+            <h3 class="text-sm font-semibold">${esc(m.name)}</h3>
+            <div class="flex items-center justify-between mt-2">
+              <p class="text-[#00b98e] text-sm font-bold">${fmt(m.price)}</p>
+              <button data-add="${m.id}" class="w-7 h-7 rounded-full bg-[#00b98e] text-white flex items-center justify-center font-bold">+</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addToCart(id) {
+      if (!MENU_BY_ID[id]) return;
+      cart[id] = (cart[id] || 0) + 1;
+      persistCart(); updateBadge();
+      toast(`${MENU_BY_ID[id].name} ajouté`);
+    }
+    function changeQty(id, delta) {
+      cart[id] = Math.max(0, (cart[id] || 0) + delta);
+      if (cart[id] === 0) delete cart[id];
+      persistCart(); updateBadge(); renderCart();
+    }
+    const cartItems = () => Object.entries(cart).filter(([, q]) => q > 0);
+    const cartSubtotal = () => cartItems().reduce((s, [id, q]) => s + MENU_BY_ID[id].price * q, 0);
+
+    function updateBadge() {
+      const count = cartItems().reduce((s, [, q]) => s + q, 0);
+      const b = $('cart-badge');
+      b.textContent = count;
+      b.classList.toggle('hidden', count === 0);
+      $('checkout-btn').disabled = count === 0;
+    }
+
+    function renderCart() {
+      const items = cartItems();
+      const el = $('cart-items');
+      if (!items.length) {
+        el.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center"><div class="text-5xl mb-3">🛒</div><p class="text-white/30">Votre panier est vide</p></div>';
+      } else {
+        el.innerHTML = items.map(([id, qty]) => {
+          const m = MENU_BY_ID[id];
+          return `<div class="flex items-center gap-3 bg-white/5 rounded-xl p-3">
+            <div class="flex-1">
+              <p class="text-sm font-medium">${esc(m.name)}</p>
+              <p class="text-[#00b98e] text-xs font-bold">${fmt(m.price * qty)}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button data-qty="${id}" data-delta="-1" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 font-bold">−</button>
+              <span class="text-sm font-bold w-5 text-center">${qty}</span>
+              <button data-qty="${id}" data-delta="1" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 font-bold">+</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      const sub = cartSubtotal();
+      $('cart-subtotal').textContent = fmt(sub);
+      $('cart-total').textContent = fmt(sub ? sub + DELIVERY_FEE : 0);
+    }
+
+    function openCart() {
+      $('cart-drawer').classList.remove('closed');
+      $('cart-backdrop').classList.remove('hidden');
+      showCartView(); renderCart();
+    }
+    function closeCart() {
+      $('cart-drawer').classList.add('closed');
+      $('cart-backdrop').classList.add('hidden');
+    }
+    function showCartView() {
+      $('cart-view').classList.remove('hidden');
+      $('checkout-view').classList.add('hidden');
+      $('order-form').classList.remove('hidden');
+      $('order-success').classList.add('hidden');
+    }
+    function showCheckoutView() {
+      if (!cartItems().length) return;
+      $('cart-view').classList.add('hidden');
+      $('checkout-view').classList.remove('hidden');
+      $('checkout-summary').innerHTML = cartItems().map(([id, q]) => {
+        const m = MENU_BY_ID[id];
+        return `<div class="flex justify-between"><span>${q}× ${esc(m.name)}</span><span>${fmt(m.price * q)}</span></div>`;
+      }).join('');
+      $('checkout-total').textContent = fmt(cartSubtotal() + DELIVERY_FEE);
+    }
+
+    function getLocation() {
+      const status = $('geo-status');
+      if (!navigator.geolocation) { status.textContent = '❌ Non supporté'; return; }
+      status.textContent = '⏳ Localisation...';
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          $('inp-lat').value = pos.coords.latitude;
+          $('inp-lng').value = pos.coords.longitude;
+          status.textContent = `📍 ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+        },
+        () => { status.textContent = '❌ Position indisponible (autorisez la géoloc)'; }
+      );
+    }
+
+    function validatePhone(v) {
+      return PHONE_REGEX.test(v.replace(/\s+/g, ''));
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      $('inp-phone').addEventListener('input', e => {
+        const v = e.target.value.replace(/\s+/g, '');
+        const valid = !v || validatePhone(v);
+        $('phone-hint').className = valid ? 'text-white/40 text-xs mt-1' : 'text-red-400 text-xs mt-1';
+        $('phone-hint').textContent = valid ? 'Format : 8 chiffres commençant par 6, 7 ou 9' : '❌ Numéro invalide';
+      });
+    });
+
+    async function submitOrder(e) {
+      e.preventDefault();
+      const items = cartItems().map(([id, qty]) => ({ id, name: MENU_BY_ID[id].name, qty, price: MENU_BY_ID[id].price }));
+      if (!items.length) return;
+
+      const name = $('inp-name').value.trim();
+      const phone = $('inp-phone').value.replace(/\s+/g, '');
+      const address = $('inp-address').value.trim();
+
+      if (!name || name.length < 2) return showFormErr('Nom trop court');
+      if (!validatePhone(phone)) return showFormErr('Numéro de téléphone Tchadien invalide');
+      if (!address || address.length < 5) return showFormErr('Adresse trop courte');
+
+      let lat = $('inp-lat').value, lng = $('inp-lng').value;
+      if (!lat || !lng) {
+        lat = RESTAURANT.lat + (Math.random() - 0.5) * 0.04;
+        lng = RESTAURANT.lng + (Math.random() - 0.5) * 0.04;
+      }
+
+      const btn = $('submit-btn');
+      btn.disabled = true; btn.textContent = 'Envoi...';
+
+      const total = cartSubtotal() + DELIVERY_FEE;
+      const result = await store.create({
+        customer_name: name, customer_phone: '+235' + phone, customer_address: address,
+        customer_lat: String(lat), customer_lng: String(lng),
+        order_items: JSON.stringify(items),
+        order_total: total.toString(),
+        order_status: 'en_attente',
+        payment_method: 'cash',
+        created_at: new Date().toISOString(),
+      });
+
+      btn.disabled = false; btn.textContent = 'Confirmer 🚀';
+
+      if (result.isOk) {
+        Object.keys(cart).forEach(k => delete cart[k]);
+        persistCart(); updateBadge();
+        $('order-form').classList.add('hidden');
+        $('order-success').classList.remove('hidden');
+        setTimeout(() => {
+          closeCart();
+          switchTab('orders');
+          openTracking(result.data.__backendId);
+        }, 1500);
+      } else {
+        showFormErr("Erreur lors de l'envoi : " + (result.error || 'inconnue'));
+      }
+    }
+    function showFormErr(msg) {
+      const err = $('form-error');
+      err.textContent = msg; err.classList.remove('hidden');
+    }
+
+    function renderOrders() {
+      const list = $('order-list');
+      const noEl = $('no-orders');
+      if (!allOrders.length) { list.innerHTML = ''; noEl.classList.remove('hidden'); return; }
+      noEl.classList.add('hidden');
+      list.innerHTML = allOrders.map(o => orderCardHtml(o, false)).join('');
+    }
+
+    function orderCardHtml(o, admin) {
+      let items = [];
+      try { items = JSON.parse(o.order_items || '[]'); } catch {}
+      const statusMap = {
+        'en_attente': { label: 'En attente', cls: 'bg-amber-500/20 text-amber-400' },
+        'en_cours': { label: 'En route', cls: 'bg-blue-500/20 text-blue-400' },
+        'livré': { label: 'Livrée', cls: 'bg-green-500/20 text-green-400' },
+        'annulée': { label: 'Annulée', cls: 'bg-red-500/20 text-red-400' },
+      };
+      const s = statusMap[o.order_status] || statusMap['en_attente'];
+      const actions = admin
+        ? `${o.order_status === 'en_attente' ? `<button data-advance="${esc(o.__backendId)}" data-status="en_cours" class="text-[11px] bg-blue-500 px-3 py-1 rounded-full hover:bg-blue-400">Démarrer 🚗</button>` : ''}
+           ${o.order_status === 'en_cours' ? `<button data-advance="${esc(o.__backendId)}" data-status="livré" class="text-[11px] bg-green-500 px-3 py-1 rounded-full hover:bg-green-400">Livré ✓</button>` : ''}`
+        : (o.order_status === 'en_attente' || o.order_status === 'en_cours'
+          ? `<button data-track="${esc(o.__backendId)}" class="text-[11px] bg-[#00b98e] text-white px-3 py-1 rounded-full hover:bg-[#00a67d] font-semibold">Suivre 📍</button>`
+          : '');
+      return `<div class="bg-[#232347] border border-white/5 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="flex-1">
+          <p class="font-semibold text-sm">${esc(o.customer_name)} · ${esc(o.customer_phone)}</p>
+          <p class="text-white/40 text-xs">${esc(o.customer_address)}</p>
+          <p class="text-white/60 text-xs mt-1">${esc(items.map(i => i.qty + '× ' + i.name).join(', '))}</p>
+          <p class="text-white/30 text-[10px] mt-1">${esc(new Date(o.created_at).toLocaleString('fr-FR'))}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-3 py-1 rounded-full text-[11px] font-bold ${s.cls}">${s.label}</span>
+          <span class="text-[#00b98e] font-bold text-sm">${fmt(parseInt(o.order_total) || 0)}</span>
+          ${actions}
+        </div>
+      </div>`;
+    }
+
+    function tryAdminLogin() {
+      const pwd = $('admin-pwd').value;
+      if (pwd === ADMIN_PASSWORD) {
+        isAdmin = true;
+        sessionStorage.setItem('pizzatime_admin', '1');
+        showAdminPanel();
+      } else {
+        $('admin-err').classList.remove('hidden');
+        setTimeout(() => $('admin-err').classList.add('hidden'), 3000);
+      }
+    }
+    function adminLogout() {
+      isAdmin = false;
+      sessionStorage.removeItem('pizzatime_admin');
+      $('admin-locked').classList.remove('hidden');
+      $('admin-panel').classList.add('hidden');
+      $('admin-pwd').value = '';
+    }
+    function showAdminPanel() {
+      $('admin-locked').classList.add('hidden');
+      $('admin-panel').classList.remove('hidden');
+      renderAdminStats();
+      renderAdminOrders();
+    }
+    function renderAdminStats() {
+      const today = new Date().toDateString();
+      const todayOrders = allOrders.filter(o => new Date(o.created_at).toDateString() === today);
+      const revenue = todayOrders.filter(o => o.order_status === 'livré').reduce((s, o) => s + (parseInt(o.order_total) || 0), 0);
+      const pending = allOrders.filter(o => o.order_status === 'en_attente').length;
+      const active = allOrders.filter(o => o.order_status === 'en_cours').length;
+      const cards = [
+        { label: 'Commandes (jour)', val: todayOrders.length, color: 'text-blue-400' },
+        { label: 'En attente', val: pending, color: 'text-amber-400' },
+        { label: 'En route', val: active, color: 'text-purple-400' },
+        { label: 'Revenu (jour)', val: fmt(revenue), color: 'text-[#00b98e]' },
+      ];
+      $('admin-stats').innerHTML = cards.map(c => `
+        <div class="bg-[#232347] border border-white/5 rounded-xl p-4">
+          <p class="text-white/50 text-xs">${c.label}</p>
+          <p class="text-xl font-bold ${c.color} mt-1">${c.val}</p>
+        </div>`).join('');
+    }
+    function renderAdminOrders() {
+      const list = allOrders.length
+        ? allOrders.map(o => orderCardHtml(o, true)).join('')
+        : '<p class="text-white/40 text-center py-8 text-sm">Aucune commande</p>';
+      $('admin-orders').innerHTML = list;
+    }
+    async function advanceOrder(id, newStatus) {
+      const o = allOrders.find(x => x.__backendId === id);
+      if (!o) return;
+      const patch = { ...o, order_status: newStatus };
+      if (newStatus === 'livré') patch.delivery_time = new Date().toISOString();
+      const r = await store.update(patch);
+      if (r.isOk) toast(newStatus === 'livré' ? '✅ Livré' : '🚗 En route');
+      else toast('Erreur : ' + r.error, 'error');
+    }
+
+    async function fetchRoute(from, to) {
+      try {
+        const url = `${OSRM_URL}/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('OSRM ' + res.status);
+        const data = await res.json();
+        if (!data.routes?.length) throw new Error('Pas de route');
+        return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      } catch (e) {
+        console.warn('OSRM fallback:', e.message);
+        return [from, to];
+      }
+    }
+
+    async function openTracking(orderId) {
+      const order = allOrders.find(o => o.__backendId === orderId);
+      if (!order) { toast('Commande introuvable', 'error'); return; }
+      trackingOrder = order;
+
+      $('tracking-screen').classList.remove('hidden');
+      lucide.createIcons();
+
+      const custLat = parseFloat(order.customer_lat) || RESTAURANT.lat + 0.02;
+      const custLng = parseFloat(order.customer_lng) || RESTAURANT.lng + 0.02;
+
+      if (!trackingMap) {
+        trackingMap = L.map('tracking-map', { zoomControl: false, attributionControl: false }).setView([RESTAURANT.lat, RESTAURANT.lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(trackingMap);
+        L.control.zoom({ position: 'bottomright' }).addTo(trackingMap);
+      } else {
+        trackingMap.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.Polyline) trackingMap.removeLayer(l); });
+      }
+      setTimeout(() => trackingMap.invalidateSize(), 100);
+
+      L.marker([RESTAURANT.lat, RESTAURANT.lng], { icon: divIcon('pin-marker', '<div class="pin-marker pin-shop"><span>🍕</span></div>') }).addTo(trackingMap);
+      L.marker([custLat, custLng], { icon: divIcon('pin-marker', '<div class="pin-marker pin-home"><span>🏠</span></div>') }).addTo(trackingMap);
+
+      $('tracking-eta').textContent = '⏳ Calcul de la route...';
+      routeCoords = await fetchRoute([RESTAURANT.lat, RESTAURANT.lng], [custLat, custLng]);
+
+      routeLine = L.polyline(routeCoords, { color: '#00b98e', weight: 4, opacity: .7 }).addTo(trackingMap);
+      courierMarker = L.marker(routeCoords[0], { icon: divIcon('courier-marker', '<div class="courier-marker">🛵</div>') }).addTo(trackingMap);
+      trackingMap.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+
+      let items = [];
+      try { items = JSON.parse(order.order_items || '[]'); } catch {}
+      $('tracking-order').innerHTML = `
+        <p class="font-semibold text-sm mb-2">${esc(order.customer_name)}</p>
+        <p class="text-white/50 text-xs mb-3">${esc(order.customer_address)}</p>
+        <div class="space-y-1 text-white/80 text-xs">
+          ${items.map(i => `<div class="flex justify-between"><span>${i.qty}× ${esc(i.name)}</span><span>${fmt(i.price * i.qty)}</span></div>`).join('')}
+        </div>
+        <div class="border-t border-white/10 mt-3 pt-2 flex justify-between font-bold text-sm">
+          <span>Total</span><span class="text-[#00b98e]">${fmt(parseInt(order.order_total) || 0)}</span>
+        </div>`;
+
+      startSim(order);
+    }
+
+    function pointAlongRoute(coords, t) {
+      if (t <= 0) return [coords[0][0], coords[0][1], 0];
+      if (t >= 1) return [coords[coords.length-1][0], coords[coords.length-1][1], coords.length-2];
+      const dists = [];
+      let total = 0;
+      for (let i = 1; i < coords.length; i++) {
+        const d = Math.hypot(coords[i][0] - coords[i-1][0], coords[i][1] - coords[i-1][1]);
+        dists.push(d); total += d;
+      }
+      let target = t * total, acc = 0;
+      for (let i = 0; i < dists.length; i++) {
+        if (acc + dists[i] >= target) {
+          const local = (target - acc) / dists[i];
+          return [
+            coords[i][0] + (coords[i+1][0] - coords[i][0]) * local,
+            coords[i][1] + (coords[i+1][1] - coords[i][1]) * local,
+            i
+          ];
+        }
+        acc += dists[i];
+      }
+      return [coords[coords.length-1][0], coords[coords.length-1][1], coords.length-2];
+    }
+
+    function startSim(order) {
+      cancelAnimationFrame(trackingRAF);
+      $('cancel-block').classList.toggle('hidden', order.order_status !== 'en_attente');
+
+      const baseStatus = order.order_status === 'en_attente' ? 0 : (order.order_status === 'en_cours' ? PREP_RATIO : 1);
+      trackingStart = performance.now() - baseStatus * SIM_DURATION_MS;
+
+      const tick = () => {
+        if ($('tracking-screen').classList.contains('hidden')) return;
+        if (trackingOrder.order_status === 'annulée') { closeTracking(); return; }
+
+        const elapsed = performance.now() - trackingStart;
+        const p = Math.min(elapsed / SIM_DURATION_MS, 1);
+
+        let step;
+        if (p < PREP_RATIO) step = 1;
+        else if (p < 1) step = 2;
+        else step = 3;
+        updateTimeline(step);
+
+        if (p >= PREP_RATIO && routeCoords.length > 1) {
+          const drive = (p - PREP_RATIO) / (1 - PREP_RATIO);
+          const pt = pointAlongRoute(routeCoords, drive);
+          courierMarker.setLatLng([pt[0], pt[1]]);
+          const segIdx = pt[2] ?? 0;
+          const nextIdx = Math.min(segIdx + 1, routeCoords.length - 1);
+          const angle = bearing(routeCoords[segIdx], routeCoords[nextIdx]);
+          const el = courierMarker.getElement()?.querySelector('.courier-marker');
+          if (el) el.style.transform = `rotate(${angle - 90}deg)`;
+        }
+
+        $('cancel-block').classList.toggle('hidden', p >= PREP_RATIO);
+
+        if (p >= 1) {
+          $('tracking-eta').textContent = '✓ Livrée';
+          $('tracking-title').textContent = 'Livraison terminée 🎉';
+          $('tracking-subtitle').textContent = 'Merci pour votre commande !';
+          updateOrderStatus(order, 'livré');
+          return;
+        }
+
+        const remaining = Math.ceil((1 - p) * 30);
+        $('tracking-eta').textContent = `Arrivée dans ~${remaining} min`;
+        if (p < PREP_RATIO) {
+          $('tracking-title').textContent = 'En préparation 👨‍🍳';
+          $('tracking-subtitle').textContent = 'Votre commande arrive bientôt';
+        } else {
+          $('tracking-title').textContent = 'Le livreur arrive 🛵';
+          $('tracking-subtitle').textContent = 'En route vers votre adresse';
+          updateOrderStatus(order, 'en_cours');
+        }
+        trackingRAF = requestAnimationFrame(tick);
+      };
+      trackingRAF = requestAnimationFrame(tick);
+    }
+
+    let _lastPush = '';
+    function updateOrderStatus(order, status) {
+      if (order.order_status === status) return;
+      const key = order.__backendId + ':' + status;
+      if (_lastPush === key) return;
+      _lastPush = key;
+      order.order_status = status;
+      const patch = { ...order, order_status: status };
+      if (status === 'livré') patch.delivery_time = new Date().toISOString();
+      store.update(patch);
+    }
+    function updateTimeline(activeStep) {
+      document.querySelectorAll('.timeline-step').forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.remove('active', 'done');
+        if (s < activeStep) el.classList.add('done');
+        else if (s === activeStep) el.classList.add('active');
+      });
+    }
+    function closeTracking() {
+      $('tracking-screen').classList.add('hidden');
+      cancelAnimationFrame(trackingRAF);
+    }
+
+    async function cancelOrder() {
+      if (!trackingOrder || trackingOrder.order_status !== 'en_attente') return;
+      if (!confirm('Annuler cette commande ?')) return;
+      const patch = { ...trackingOrder, order_status: 'annulée' };
+      const r = await store.update(patch);
+      if (r.isOk) {
+        trackingOrder.order_status = 'annulée';
+        toast('Commande annulée');
+        closeTracking();
+      } else toast('Erreur', 'error');
+    }
+
+    function switchTab(tab) {
+      ['menu', 'orders', 'admin'].forEach(t => $('section-' + t).classList.toggle('hidden', t !== tab));
+      document.querySelectorAll('.nav-tab').forEach(b => {
+        const active = b.dataset.tab === tab;
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('text-white/50', !active);
+      });
+      if (tab === 'orders') renderOrders();
+      if (tab === 'admin') { if (isAdmin) showAdminPanel(); else { $('admin-locked').classList.remove('hidden'); $('admin-panel').classList.add('hidden'); } }
+    }
+
+    document.addEventListener('click', e => {
+      const t = e.target;
+      const find = sel => t.closest(sel);
+      if (find('[data-add]')) return addToCart(find('[data-add]').dataset.add);
+      if (find('[data-qty]')) { const b = find('[data-qty]'); return changeQty(b.dataset.qty, parseInt(b.dataset.delta)); }
+      if (find('[data-cat]')) { currentCat = find('[data-cat]').dataset.cat; updateCategoryStyles(); renderMenu(); return; }
+      if (find('[data-tab]')) return switchTab(find('[data-tab]').dataset.tab);
+      if (find('[data-track]')) return openTracking(find('[data-track]').dataset.track);
+      if (find('[data-advance]')) { const b = find('[data-advance]'); return advanceOrder(b.dataset.advance, b.dataset.status); }
+    });
+
+    $('search-input').addEventListener('input', e => { currentSearch = e.target.value; renderMenu(); });
+    $('cart-toggle').addEventListener('click', openCart);
+    $('cart-close').addEventListener('click', closeCart);
+    $('cart-backdrop').addEventListener('click', closeCart);
+    $('checkout-btn').addEventListener('click', showCheckoutView);
+    $('checkout-back').addEventListener('click', showCartView);
+    $('geo-btn').addEventListener('click', getLocation);
+    $('order-form').addEventListener('submit', submitOrder);
+    $('tracking-close').addEventListener('click', closeTracking);
+    $('cancel-order-btn').addEventListener('click', cancelOrder);
+    $('admin-login').addEventListener('click', tryAdminLogin);
+    $('admin-pwd').addEventListener('keypress', e => { if (e.key === 'Enter') tryAdminLogin(); });
+    $('admin-logout').addEventListener('click', adminLogout);
+
+    let installPromptEvent = null;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      installPromptEvent = e;
+      $('install-btn').classList.remove('hidden');
+    });
+    $('install-btn').addEventListener('click', async () => {
+      if (!installPromptEvent) return;
+      installPromptEvent.prompt();
+      const { outcome } = await installPromptEvent.userChoice;
+      if (outcome === 'accepted') $('install-btn').classList.add('hidden');
+      installPromptEvent = null;
+    });
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      renderCategories();
+      renderMenu();
+      updateBadge();
+      await store.init({
+        onDataChanged(data) {
+          allOrders = [...data].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          if (!$('section-orders').classList.contains('hidden')) renderOrders();
+          if (!$('section-admin').classList.contains('hidden') && isAdmin) { renderAdminStats(); renderAdminOrders(); }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
