@@ -1,0 +1,16 @@
+{
+  "name": "Pizza Time — N'Djamena",
+  "short_name": "Pizza Time",
+  "description": "Livraison de pizzas, tacos et burgers à N'Djamena en 30 min",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f1e",
+  "theme_color": "#00b98e",
+  "lang": "fr",
+  "categories": ["food", "shopping"],
+  "icons": [
+    { "src": "https://api.iconify.design/twemoji/pizza.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "https://api.iconify.design/twemoji/pizza.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
