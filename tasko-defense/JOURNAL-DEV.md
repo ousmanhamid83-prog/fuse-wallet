@@ -1,0 +1,64 @@
+# Journal de développement — Tasko Defense
+
+Trace chronologique du développement, capturée au fil de l'eau (demandé par le
+commanditaire). Chaque entrée = une étape, avec la décision et sa justification.
+L'historique Git (une entrée par commit) complète ce journal.
+
+---
+
+## 2026-10-14 — Audit de l'existant (v2, archive de juin 2026)
+
+Avant de développer, analyse technique de l'aptitude au lancement de l'archive
+`tasko-defense.zip`. Méthode : 5 testeurs (un par composant) + 5 vérificateurs
+indépendants (réfutation adverse) + 1 critique de complétude. 73 constats, 63
+confirmés, 10 partiellement, 0 réfuté. Sévérités : 5 bloquants, 10 graves, 30
+moyens, 28 mineurs. Tests en bac à sable : scanners remplacés par des stubs,
+réseau simulé, seul 127.0.0.1 contacté, aucune cible réelle scannée.
+
+Constats structurants qui orientent la v3 :
+- L'autorisation (mandat) n'était qu'un document : rien, dans le logiciel, n'empêchait
+  de scanner un site non couvert. → **Décision n°1 : faire du mandat un verrou logiciel.**
+- Plusieurs outils tournaient en produisant des résultats faux sans le signaler
+  (dossier threat-intel accusant des IP innocentes, contrôle d'intégrité des preuves
+  toujours en échec, scan NSE `vuln` lançant des scripts DoS, regex ZAP jamais vraie,
+  plan ZAP modifiant des données réelles). → **Décision n°2 : corriger la correction
+  silencieuse et bloquer les comportements contraires au mandat (DoS, hors périmètre,
+  modification de données).**
+- L'installation échouait sur Ubuntu 24.04 (pip PEP 668, Go/Ruby/Docker jamais
+  installés, service systemd du honeypot non démarrable). → **Décision n°3 : réparer
+  l'installation et le service.**
+
+Rapport complet : `RAPPORT-tasko-defense.md` (hors dépôt, livré au commanditaire).
+
+## 2026-10-14 — v3 : socle logiciel
+
+- **Import baseline** (commit « import baseline toolkit ») : l'archive est versionnée
+  comme point de départ, sans le dossier parasite `{outils,mandat,docs}`.
+- **Moteur de mandat** (`tasko/mandat.py`, commit dédié) : cœur de la v3. Un mandat
+  lisible par machine (`mandats/*.mandat.yaml`) reflète le mandat juridique signé.
+  `autoriser(mandat, cible, type_test, moment, ip_source)` refuse tout test non
+  couvert. Verrous : signature obligatoire, dates de validité, fenêtres horaires
+  (fuseau du mandat, gère le passage de minuit), périmètre par **labels** de domaine
+  (évite le piège `exemple.cm` vs `exemple.cm.evil.net`), exclusions, type de test
+  autorisé, IP source déclarée. Règles renforcées : `scan_reseau` exige un hébergement
+  dédié ; `exploitation` exige l'Annexe D. 22 tests unitaires, tous verts.
+  Choix : gabarit non signé = tolérant (se charge, liste les champs à remplir) ;
+  mandat signé = strict (un champ invalide est une erreur, pas un test lancé par erreur).
+- **Scans cadrés** (commit « scans web & réseau cadrés par le mandat ») :
+  `_garde-mandat.sh` + `scan-web.sh`/`scan-reseau.sh` appellent le moteur AVANT tout
+  envoi. Testé avec stubs sur 127.0.0.1 : mandat non signé → 0 appel d'outil ; mandat
+  signé → scan autorisé. Corrections d'audit intégrées (code de sortie WPScan, token
+  exigé, normalisation de sites.txt, `nuclei -exclude-tags dos,fuzz,intrusive,brute-force`,
+  NSE `vuln and safe and not external`, anti-injection d'arguments).
+
+## 2026-10-14 — v3 : durcissement des composants (en parallèle)
+
+Durcissement de `honeypot.py`, `threat-intel.py`, `collecte-preuves.sh` et du plan
+ZAP (`zap-auth.yaml` + lanceur `zap-auth.sh` cadré par le mandat), chacun contre la
+liste précise de défauts de l'audit et du critique. Tests locaux uniquement (127.0.0.1,
+réseau simulé, stubs), aucun scan réel. Détails dans le CHANGELOG et les commits.
+
+> Note de méthode (capture du développement) : je ne peux pas enregistrer l'écran,
+> mais ce journal + l'historique Git (commits atomiques, messages détaillés) + les
+> preuves de test dans chaque message de commit constituent la trace complète et
+> rejouable du développement.
