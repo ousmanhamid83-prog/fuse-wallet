@@ -1,0 +1,91 @@
+# zap-auth.yaml — Scan ZAP AUTHENTIFIÉ (derrière le login).
+# C'est CE scan qui révèle les failles que le scan public ne voit pas.
+#
+# Lancement (Docker) :
+#   docker run -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy:stable \
+#     zap.sh -cmd -autorun /zap/wrk/zap-auth.yaml
+#
+# Avant : remplace l'URL, les chemins de login, et les identifiants par les tiens.
+# Les identifiants viennent de variables d'environnement (jamais en dur).
+
+env:
+  contexts:
+    - name: "site-authentifie"
+      urls:
+        - "https://ton-site.cm/"
+      includePaths:
+        - "https://ton-site.cm.*"
+      excludePaths:
+        - "https://ton-site.cm/logout.*"   # ne pas se déconnecter pendant le scan
+        - ".*\\.(png|jpg|css|js|woff2?)$"   # ignorer les ressources statiques
+      authentication:
+        method: "form"
+        parameters:
+          loginPageUrl: "https://ton-site.cm/login"
+          loginRequestUrl: "https://ton-site.cm/login"
+          # Adapte les NOMS de champs à ton formulaire (inspecte le HTML du login)
+          loginRequestBody: "username={%username%}&password={%password%}"
+        verification:
+          method: "response"
+          # Regex qui prouve qu'on EST connecté (ex. redirection vers /dashboard)
+          loggedInRegex: '.*\\Q/dashboard\\E.*'
+          # Regex qui prouve qu'on est DÉCONNECTÉ (réapparition du login)
+          loggedOutRegex: '.*\\Q/login\\E.*'
+      sessionManagement:
+        method: "cookie"
+      users:
+        - name: "compte-audit"
+          credentials:
+            # Définis ces variables avant de lancer :
+            #   export ZAP_USER="...", export ZAP_PWD="..."
+            username: "${ZAP_USER}"
+            password: "${ZAP_PWD}"
+  parameters:
+    failOnError: true
+    progressToStdout: true
+
+jobs:
+  # 1. Configure l'analyse passive (sans danger, observe seulement)
+  - type: passiveScan-config
+    parameters:
+      scanOnlyInScope: true
+
+  # 2. Explore le site en étant connecté
+  - type: spider
+    parameters:
+      context: "site-authentifie"
+      user: "compte-audit"
+      maxDuration: 10
+
+  # 3. Explore aussi le contenu JavaScript / SPA (Vue, React...)
+  - type: spiderAjax
+    parameters:
+      context: "site-authentifie"
+      user: "compte-audit"
+      maxDuration: 15
+
+  # 4. Attend la fin de l'analyse passive
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  # 5. Analyse ACTIVE (teste réellement les vulnérabilités, en zone autorisée)
+  - type: activeScan
+    parameters:
+      context: "site-authentifie"
+      user: "compte-audit"
+      policy: "Default Policy"
+
+  # 6. Rapport HTML lisible
+  - type: report
+    parameters:
+      template: "traditional-html"
+      reportDir: "/zap/wrk"
+      reportFile: "rapport-zap-auth.html"
+
+  # 7. Rapport JSON (pour suivi/comparaison dans le temps)
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "/zap/wrk"
+      reportFile: "rapport-zap-auth.json"
