@@ -1,0 +1,43 @@
+# Mandat machine pour tchadone.com.
+# ⚠️ NON SIGNÉ : en l'état, le moteur refuse tout test. Ne passer `signe: true`
+# que lorsque le PROPRIÉTAIRE de tchadone.com a signé mandat/mandat-audit-v2.md
+# (voir aussi MANDAT-tchadone.md). Remplir les [champs] avec les vraies valeurs.
+mandat:
+  reference: "TASKO-2026-tchadone-001"
+
+  signe: false
+  signe_par: "[Responsable de tchadone.com]"
+  signe_le: "[AAAA-MM-JJ]"
+
+  valide_du: "[AAAA-MM-JJ]"
+  valide_au: "[AAAA-MM-JJ]"
+
+  fuseau: "Africa/Ndjamena"
+
+  fenetres:
+    - jours: [1, 2, 3, 4, 5]
+      debut: "01:00"
+      fin: "05:00"
+
+  ip_source:
+    - "[IP fixe de ton VPS d'audit]"
+
+  perimetre:
+    domaines:
+      - "tchadone.com"
+    ips: []                    # à remplir UNIQUEMENT si serveur dédié fourni par le Client
+    heberge_dedie: false       # mettre true seulement sur confirmation écrite (sinon pas de scan_reseau)
+
+  exclusions:
+    domaines: []
+    ips: []
+
+  annexe_d_signee: false
+
+  tests_autorises:
+    decouverte: false          # passe à true si serveur dédié
+    scan_web: true
+    scan_reseau: false         # interdit tant que heberge_dedie n'est pas true
+    test_authentifie: false    # true si le Client fournit un compte de test
+    exploitation: false
+    ingenierie_sociale: false

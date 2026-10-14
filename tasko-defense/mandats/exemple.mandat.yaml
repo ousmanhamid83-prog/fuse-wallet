@@ -1,0 +1,53 @@
+# Mandat lisible par machine — modèle commenté.
+# Il reflète le mandat JURIDIQUE signé (mandat/mandat-audit-v2.md).
+# Tant que `signe: false`, le moteur (tasko/mandat.py) refuse TOUT test.
+mandat:
+  reference: "TASKO-2026-exemple-001"
+
+  # Passe à true UNIQUEMENT quand le propriétaire des systèmes a signé le
+  # mandat papier. C'est un verrou : false => aucun test, quelles que soient
+  # les cases ci-dessous.
+  signe: false
+  signe_par: "[Nom du signataire côté Client]"
+  signe_le: "2026-01-01"
+
+  # Validité : le moteur refuse avant valide_du et après valide_au.
+  valide_du: "2026-01-01"
+  valide_au: "2026-12-31"
+
+  # Fuseau de référence pour les fenêtres horaires.
+  fuseau: "Africa/Ndjamena"
+
+  # Fenêtres autorisées (heure locale du fuseau). jours : 1=lundi … 7=dimanche.
+  # Une fenêtre peut franchir minuit (debut 22:00, fin 05:00).
+  fenetres:
+    - jours: [1, 2, 3, 4, 5]
+      debut: "01:00"
+      fin: "05:00"
+
+  # IP fixe(s) d'où partent les tests (Article 3 du mandat). Déclarée au Client
+  # pour distinguer l'audit d'une attaque. Les outils refusent une autre source.
+  ip_source:
+    - "198.51.100.10"
+
+  perimetre:
+    domaines:
+      - "exemple.cm"          # couvre exemple.cm et ses sous-domaines
+    ips: []                    # vide si hébergement mutualisé
+    heberge_dedie: false       # true seulement si serveur dédié (requis pour scan_reseau)
+
+  exclusions:
+    domaines:
+      - "*.cloudflare.com"
+    ips: []
+
+  # Annexe D (exploitation contrôlée) : true seulement si l'annexe est signée.
+  annexe_d_signee: false
+
+  tests_autorises:
+    decouverte: true
+    scan_web: true
+    scan_reseau: false         # false tant que heberge_dedie n'est pas confirmé
+    test_authentifie: false
+    exploitation: false        # exige annexe_d_signee: true
+    ingenierie_sociale: false

@@ -1,0 +1,4 @@
+# Dépendances Python de Tasko Defense.
+# Sur Ubuntu 24.04, préférer :  sudo apt install -y python3-yaml python3-requests
+PyYAML>=6.0
+requests>=2.31   # requis uniquement par threat-intel.py quand ABUSEIPDB_KEY est défini
