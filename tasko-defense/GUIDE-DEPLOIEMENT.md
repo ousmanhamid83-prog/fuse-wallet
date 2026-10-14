@@ -81,54 +81,83 @@ attaquant qui nettoierait un serveur compromis.
 > Sans mandat signé, aucun scan ne doit partir. C'est ce qui distingue l'audit
 > légitime de l'accès non autorisé — et ce qui protège Tasko juridiquement.
 
-### Étape 1 — Préparer le nœud d'audit (VPS)
+### Étape 0 bis — Charger le mandat dans le logiciel
+
+Le mandat juridique signé (Étape 0) se double d'un mandat **lisible par machine**
+qui sert de verrou : les outils refusent toute cible non couverte.
 
 ```bash
-# Sur ton VPS Hostinger (Ubuntu)
-sudo apt update && sudo apt install -y python3-pip nmap nikto
-pip3 install requests
+cd tasko-defense
+cp mandats/exemple.mandat.yaml mandats/monclient.mandat.yaml
+# Remplis le périmètre (domaines/IP), les dates, la fenêtre horaire, l'IP source,
+# puis — UNIQUEMENT après signature du mandat papier — passe `signe: true`.
 
-# Outils de scan web
-go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-gem install wpscan
-
-# Récupère ce dépôt sur le VPS
-# (scp, git, ou upload via hPanel)
+python3 -m tasko.cli info --mandat mandats/monclient.mandat.yaml      # résumé
+python3 -m tasko.cli verifier --mandat mandats/monclient.mandat.yaml \
+    --cible https://monclient.cm/ --type scan_web --ip-source <IP d'audit>
+# exit 0 = autorisé, 2 = refusé, 3 = erreur de mandat
 ```
 
-### Étape 2 — Lancer un audit (sous mandat)
+> Tant que `signe: false`, **aucun** test n'est autorisé. On peut gérer plusieurs
+> clients : un fichier `mandats/<client>.mandat.yaml` par mandat signé.
+
+### Étape 1 — Préparer le nœud d'audit (VPS Ubuntu 24.04)
+
+```bash
+# Dépendances via apt (sur Ubuntu 24.04, `pip install` est refusé par PEP 668).
+sudo apt update
+sudo apt install -y python3-yaml python3-requests nmap \
+     ruby-full build-essential libcurl4-openssl-dev zlib1g-dev docker.io
+sudo gem install wpscan
+sudo usermod -aG docker "$USER"   # puis se reconnecter (ZAP via docker)
+
+# Nuclei : binaire officiel (évite une compilation Go longue sur un petit VPS).
+NUCLEI_VER=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest \
+  | grep -oP '"tag_name":\s*"v\K[0-9.]+')
+curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip
+sudo unzip -o /tmp/nuclei.zip nuclei -d /usr/local/bin/
+
+# Récupère ce dépôt sur le VPS (scp, git, ou upload via hPanel).
+```
+
+### Étape 2 — Lancer un audit (cadré par le mandat)
+
+Les scripts interrogent le mandat avant tout envoi : une cible non couverte est
+ignorée (scan web) ou bloque le scan (scan réseau). Déclare le mandat et ton IP.
 
 ```bash
 cd tasko-defense/outils/scan
+export MANDAT=../../mandats/monclient.mandat.yaml   # mandat SIGNÉ
+export AUDIT_IP=198.51.100.10                        # ton IP source (Article 3)
 
-# 2a. Scan web (configure sites.txt d'abord — uniquement les sites sous mandat)
+# 2a. Scan web — cibles dans sites.txt (copie sites.txt.exemple), ou en argument.
 export WPSCAN_API_TOKEN="ton_token"
-bash scan-web.sh
+bash scan-web.sh                       # ou : bash scan-web.sh https://monclient.cm/
 
-# 2b. Scan authentifié (adapte zap-auth.yaml : URL, champs login, regex)
-export ZAP_USER="compte_test"; export ZAP_PWD="motdepasse"
-docker run -v $(pwd):/zap/wrk/ -e ZAP_USER -e ZAP_PWD \
-  -t ghcr.io/zaproxy/zaproxy:stable \
-  zap.sh -cmd -autorun /zap/wrk/zap-auth.yaml
+# 2b. Scan authentifié ZAP — le lanceur vérifie le mandat (test_authentifie) d'abord.
+#     À réserver de préférence à une copie de PRÉ-PROD (le scan actif écrit des données).
+export ZAP_USER="compte_test" ZAP_PWD="motdepasse"
+TARGET="https://monclient.cm/" bash zap-auth.sh
 
-# 2c. Scan réseau (UNIQUEMENT le VPS du client, jamais du mutualisé partagé)
+# 2c. Scan réseau — UNIQUEMENT un serveur DÉDIÉ du client (jamais du mutualisé).
+#     Exige `heberge_dedie: true` et `scan_reseau: true` dans le mandat.
 bash scan-reseau.sh ip-du-serveur-client
 ```
 
-Trie les findings par sévérité (**critical/high** d'abord), livre le rapport au
-client, et relance après correction pour vérifier.
+Trie les findings par sévérité (**critical/high** d'abord), livre le rapport
+chiffré, et relance après correction pour vérifier.
 
 ### Étape 3 — Déployer le honeypot (sur infra isolée)
 
 ```bash
-cd tasko-defense/outils
+# 1) Crée l'utilisateur de service et installe le code sous /opt.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin honeypot
+sudo cp -r tasko-defense /opt/
 
-# Ouvre SEULEMENT les ports honeypot dans le pare-feu (jamais tes vrais services)
+# 2) Ouvre SEULEMENT les ports honeypot, et ACTIVE le pare-feu.
 sudo ufw allow 2222/tcp   # faux SSH
 sudo ufw allow 8080/tcp   # faux panneau admin
-
-# Lance le honeypot en continu (systemd recommandé)
-python3 honeypot.py
+sudo ufw --force enable   # sans ça, les règles ne s'appliquent pas
 ```
 
 Service systemd (`/etc/systemd/system/honeypot.service`) :
@@ -137,35 +166,51 @@ Service systemd (`/etc/systemd/system/honeypot.service`) :
 Description=Tasko Honeypot
 After=network.target
 [Service]
-WorkingDirectory=/opt/tasko-defense/outils
+User=honeypot
+Group=honeypot
+# LogsDirectory crée /var/log/tasko-honeypot/ APPARTENANT à l'utilisateur honeypot.
+LogsDirectory=tasko-honeypot
+Environment=HONEYPOT_LOG=/var/log/tasko-honeypot/honeypot.log PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/tasko-defense/outils/honeypot.py
 Restart=always
-User=honeypot
+RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
 ```bash
-sudo systemctl enable --now honeypot
+sudo systemctl daemon-reload && sudo systemctl enable --now honeypot
 ```
+
+> Pourquoi ces correctifs : sans l'utilisateur `honeypot` créé et sans un
+> répertoire de log inscriptible (`LogsDirectory` + `HONEYPOT_LOG`), le service
+> démarrait « active (running) » mais n'enregistrait rien.
 
 ### Étape 4 — Renseignement sur les menaces
 
 ```bash
 cd tasko-defense/outils
+# La clé AbuseIPDB est FACULTATIVE : sans elle, l'analyse tourne hors ligne
+# (requests n'est importé que si la clé est définie).
 export ABUSEIPDB_KEY="ta_cle_gratuite"   # abuseipdb.com, 1000 req/jour
 
-# Analyser les logs d'un site attaqué
+# Analyser les logs d'un site attaqué (l'IP cliente est lue dans le bon champ)
 python3 threat-intel.py /var/log/nginx/access.log --type web
 
-# Analyser les tentatives SSH
+# Tentatives SSH
 python3 threat-intel.py /var/log/auth.log --type auth
 
-# Analyser les captures du HONEYPOT (les attaquants s'y dévoilent le plus)
-python3 threat-intel.py honeypot.log --type web
+# Captures du HONEYPOT (les attaquants s'y dévoilent le plus)
+python3 threat-intel.py /var/log/tasko-honeypot/honeypot.log --type web
+
+# Optionnel : rattacher le dossier au mandat qui a autorisé l'analyse
+python3 threat-intel.py /var/log/nginx/access.log --type web \
+    --mandat-ref TASKO-2026-monclient-001
 ```
 
-Le dossier JSON produit (IOC + réputation + signatures d'attaque) est **prêt à
-transmettre aux autorités** pour l'attribution. Aucune machine attaquante n'est
+Le dossier JSON (IOC + réputation + signatures, plus l'empreinte SHA-256 du log
+source, les horodatages et des extraits de preuve) est accompagné d'un `.sha256`
+et destiné aux autorités. Seules les IP **clientes** sont retenues (plus de faux
+positifs tirés des User-Agent ou des payloads). Aucune machine attaquante n'est
 contactée.
 
 ### Étape 5 — Réponse à incident (le jour J)
@@ -178,11 +223,20 @@ ISOLER  →  PRÉSERVER  →  ÉRADIQUER  →  RÉTABLIR   (jamais : effacer d'a
 ```
 
 ```bash
-# Sur le serveur compromis, en root, APRÈS avoir pris un snapshot VPS
-sudo bash tasko-defense/outils/incident/collecte-preuves.sh
+# Sur le serveur compromis, en root, APRÈS avoir pris un snapshot VPS.
+# Le dossier de preuves est écrit sur un support EXTERNE (argument obligatoire),
+# jamais sur le disque compromis.
+sudo bash tasko-defense/outils/incident/collecte-preuves.sh /mnt/preuves-externe
 ```
-Le script fige l'état (processus, réseau, logs) et **hache tout** (preuve
-d'intégrité). Puis : threat-intel sur les logs collectés → dossier autorités.
+Le script fige l'état volatil (processus, réseau, sessions), copie les logs et
+les artefacts de persistance, et **hache tout** (SHA-256). Il vérifie ensuite
+l'intégrité : `sha256sum -c MANIFEST.txt` doit passer, et l'empreinte du manifest
+est affichée pour être notée hors du serveur. Puis : threat-intel sur les logs
+collectés → dossier autorités.
+
+> Note : le snapshot Hostinger est un point de restauration **disque** (il ne
+> garantit pas la capture de la RAM). Pour une image mémoire, fais intervenir un
+> professionnel DFIR avant toute manipulation.
 
 ### Étape 6 — Centralisation Wazuh (surveillance continue)
 
@@ -194,16 +248,33 @@ installe l'agent Wazuh et fais-lui ingérer :
 - les logs web (Nginx/Apache)
 - les logs d'authentification (SSH)
 - le `honeypot.log` (format JSON déjà compatible)
-- le `security.json` d'AfriGuard si déployé
 
 ```xml
 <!-- Sur le honeypot : /var/ossec/etc/ossec.conf -->
 <localfile>
   <log_format>json</log_format>
-  <location>/opt/tasko-defense/outils/honeypot.log</location>
+  <location>/var/log/tasko-honeypot/honeypot.log</location>
   <label key="@source">tasko-honeypot</label>
 </localfile>
 ```
+
+**Important :** ingérer le log ne suffit pas. Par défaut, aucune règle Wazuh ne
+correspond aux champs du honeypot, donc aucune alerte n'est levée et l'événement
+n'est pas archivé. Ajoute une règle locale sur le **manager**
+(`/var/ossec/etc/rules/local_rules.xml`) :
+
+```xml
+<group name="tasko,honeypot,">
+  <rule id="100200" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="honeypot">\.+</field>
+    <description>Tasko honeypot $(honeypot) — accès depuis $(source_ip)</description>
+  </rule>
+</group>
+```
+
+Valide avec `wazuh-logtest` (colle une ligne de `honeypot.log`). Pour tout
+conserver même sans alerte, active `<logall_json>yes</logall_json>`.
 
 ---
 

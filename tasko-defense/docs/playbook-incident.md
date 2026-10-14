@@ -1,5 +1,5 @@
 # Playbook — Réponse à incident & préservation des preuves
-## Africa Connect — usage défensif
+## Tasko Defense — usage défensif
 
 Ce document couvre **trois moments** :
 - réagir **maintenant** à une intrusion (§ Réaction immédiate)
