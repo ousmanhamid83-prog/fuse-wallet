@@ -10,97 +10,351 @@ Le résultat est un dossier exploitable par les autorités pour l'attribution.
 
 ⚠️ Légal et défensif :
   - On lit UNIQUEMENT les logs des systèmes que tu es autorisé à auditer (mandat).
-  - On interroge des bases PUBLIQUES (AbuseIPDB) — on ne sonde PAS l'attaquant.
-  - Aucune connexion n'est établie vers les IP analysées.
+  - On interroge la base PUBLIQUE AbuseIPDB — on ne sonde JAMAIS l'attaquant.
+  - Aucune connexion n'est JAMAIS établie vers les IP analysées (voir plus bas).
+
+⚠️ IP cliente vraie (anti-usurpation) :
+  L'IP d'un attaquant est extraite UNIQUEMENT du champ fiable de chaque ligne
+  ($remote_addr pour nginx/apache, `from`/`rhost=` pour sshd, `source_ip` pour le
+  honeypot). On ne « ramasse » plus une IP apparaissant dans l'URL, le Referer ou
+  le User-Agent : un attaquant pouvait y glisser l'IP d'un tiers pour l'incriminer.
+  Derrière un CDN / reverse-proxy (Cloudflare, etc.), $remote_addr est l'IP du
+  proxy : configure nginx `real_ip` pour obtenir la vraie IP cliente, p.ex.
+      set_real_ip_from 173.245.48.0/20;         # plages du CDN
+      real_ip_header   CF-Connecting-IP;        # ou X-Forwarded-For
+  sans cela, le premier champ reste l'IP du proxy, pas celle de l'attaquant.
 
 Prérequis :
-  pip install requests
-  Clé AbuseIPDB gratuite : https://www.abuseipdb.com (1000 requêtes/jour)
-  export ABUSEIPDB_KEY="ta_cle"
+  - `requests` est FACULTATIF : il n'est importé que si ABUSEIPDB_KEY est défini.
+    Sans clé, l'outil tourne 100 % hors-ligne (aucun import, aucune erreur).
+  - Ubuntu 24.04 (pip bloqué par PEP 668) :  sudo apt install python3-requests
+    (ou, dans un venv dédié : pip install requests)
+  - Clé AbuseIPDB gratuite : https://www.abuseipdb.com (1000 requêtes/jour)
+      export ABUSEIPDB_KEY="ta_cle"
 
 Usage :
   python3 threat-intel.py /var/log/nginx/access.log
   python3 threat-intel.py /var/log/auth.log --type auth
+  python3 threat-intel.py /var/log/nginx/access.log.3.gz
+  python3 threat-intel.py honeypot.log --type honeypot --exclude admins.txt \
+          --mandat-ref TASKO-2026-xxx-001
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import gzip
+import hashlib
 import ipaddress
 import json
 import os
 import re
+import socket
 import sys
+import urllib.parse
+import uuid
 from datetime import datetime, timezone
 
-try:
-    import requests
-except ImportError:
-    print("Installe d'abord : pip install requests", file=sys.stderr)
-    sys.exit(1)
+TOOL_VERSION = "2.0.0"
 
+# Clé lue au démarrage : si vide => mode hors-ligne, `requests` n'est jamais importé.
 ABUSEIPDB_KEY = os.environ.get("ABUSEIPDB_KEY", "")
 
-# Extraction d'IPv4 (on ignore les IP privées : ce ne sont pas des attaquants externes)
-IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+# CGNAT (RFC 6598) : plage partagée par l'opérateur, pas une IP publique attribuable.
+_CGNAT4 = ipaddress.ip_network("100.64.0.0/10")
 
-# Motifs d'activité suspecte dans les logs web (tentatives classiques)
+# Seuil (conservateur) de promotion de l'indicateur « brute-force par clé » :
+# il faut BEAUCOUP de connexions avortées en phase d'auth pour le retenir.
+SSH_KEYPROBE_MIN = 10
+
+# ---------------------------------------------------------------------------
+# Signatures WEB. On matche sur un espace combinant la ligne BRUTE et sa version
+# URL-décodée (deux passes d'unquote_plus) : %20UNION%20SELECT, UNION/**/SELECT,
+# UNION+SELECT et les doubles-encodages (%252f) sont ainsi tous détectés.
+# Les bornes de mots (\b) évitent les faux positifs (p.ex. « eval » dans un mot).
+# ---------------------------------------------------------------------------
 SUSPICIOUS_WEB = [
-    (r"\.\./\.\.", "path_traversal"),
-    (r"(?i)union\s+select", "sql_injection"),
-    (r"(?i)<script", "xss_attempt"),
-    (r"(?i)/wp-login\.php", "wp_login_bruteforce"),
-    (r"(?i)/xmlrpc\.php", "xmlrpc_abuse"),
-    (r"(?i)\.(env|git|sql|bak)\b", "sensitive_file_probe"),
-    (r"(?i)(eval|base64_decode|shell_exec)", "code_injection_probe"),
+    (re.compile(r"\.\.[\/\\]"), "path_traversal"),                       # ../ ou ..\ (après décodage)
+    (re.compile(r"(?i)/etc/passwd\b"), "path_traversal"),
+    (re.compile(r"(?i)\bunion\b[\s/*+]+\bselect\b"), "sql_injection"),   # UNION/**/SELECT, UNION+SELECT, %20
+    (re.compile(r"(?i)\b(?:or|and)\b\s+['\"]?\d+['\"]?\s*=\s*['\"]?\d+"), "sql_injection"),  # ' or 1=1
+    (re.compile(r"(?i)<script\b"), "xss_attempt"),
+    (re.compile(r"(?i)\bon(?:error|load|mouseover|click|focus)\s*="), "xss_attempt"),
+    (re.compile(r"(?i)/wp-login\.php"), "wp_login_bruteforce"),
+    (re.compile(r"(?i)/xmlrpc\.php"), "xmlrpc_abuse"),
+    (re.compile(r"(?i)\.(?:env|git|sql|bak|htpasswd|aws)\b"), "sensitive_file_probe"),
+    (re.compile(r"(?i)\b(?:eval|base64_decode|shell_exec|system|passthru|popen|proc_open)\s*\("),
+     "code_injection_probe"),
 ]
-# Motifs dans les logs d'authentification SSH
+
+# Signatures AUTH (sshd). On NE flague PAS « Accepted publickey » (admin légitime).
 SUSPICIOUS_AUTH = [
-    (r"Failed password", "ssh_failed_login"),
-    (r"Invalid user", "ssh_invalid_user"),
-    (r"authentication failure", "auth_failure"),
+    (re.compile(r"\bFailed password\b"), "ssh_failed_login"),
+    (re.compile(r"\bInvalid user\b"), "ssh_invalid_user"),
+    (re.compile(r"\bauthentication failure\b"), "auth_failure"),
+    (re.compile(r"(?i)\bnot allowed because\b"), "ssh_access_denied"),
+    (re.compile(r"\bPOSSIBLE BREAK-IN ATTEMPT\b"), "reverse_dns_mismatch"),
 ]
+
+# Signal faible « brute-force par clé » : connexions avortées en phase d'auth.
+# On ne le promeut en signature que si l'IP dépasse SSH_KEYPROBE_MIN occurrences.
+RE_KEYPROBE = re.compile(r"(?:Connection closed by|Disconnected from) authenticating user ")
+
+# ---------------------------------------------------------------------------
+# Extraction d'IP cliente (jamais prise dans l'URL / Referer / User-Agent).
+# ---------------------------------------------------------------------------
+# sshd : IP après `rhost=`, `from <ip> port`, ou `authenticating user <u> <ip> port`.
+_RE_AUTH_IP = [
+    re.compile(r"rhost=([0-9A-Fa-f:.]+)"),
+    re.compile(r"\bfrom ([0-9A-Fa-f:.]+) port \d+"),
+    re.compile(r"authenticating user \S+ ([0-9A-Fa-f:.]+) port \d+"),
+    re.compile(r"(?:closed|reset) by ([0-9A-Fa-f:.]+) port \d+"),
+]
+
+# Horodatage nginx/apache : [10/Oct/2026:13:55:36 +0000]
+_RE_TS_WEB = re.compile(r"\[([^\]]+)\]")
+# Horodatage auth : ISO (journald) ou syslog traditionnel « Oct 10 13:55:36 ».
+_RE_TS_ISO = re.compile(r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:[+-]\d{2}:?\d{2}|Z)?)")
+_RE_TS_SYSLOG = re.compile(r"^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})")
+
+
+def normalise_ip(raw: str) -> str | None:
+    """Renvoie l'IP normalisée (str) si c'est une IP valide, sinon None."""
+    if not raw:
+        return None
+    raw = raw.strip().strip("[]")
+    try:
+        return str(ipaddress.ip_address(raw))
+    except ValueError:
+        return None
 
 
 def is_public_ip(ip: str) -> bool:
-    """Garde uniquement les IP publiques (les privées ne sont pas des attaquants externes)."""
+    """IP publique routable uniquement (ni privée, ni CGNAT, ni multicast…).
+
+    Exclut explicitement : privé, loopback, réservé, non-spécifié, lien-local,
+    multicast (TI-15) et CGNAT 100.64.0.0/10 (TI-15) — ces plages ne désignent
+    jamais un attaquant externe attribuable.
+    """
     try:
         addr = ipaddress.ip_address(ip)
-        return not (addr.is_private or addr.is_loopback or addr.is_reserved)
     except ValueError:
         return False
+    if (addr.is_private or addr.is_loopback or addr.is_reserved
+            or addr.is_unspecified or addr.is_link_local or addr.is_multicast):
+        return False
+    if addr.version == 4 and addr in _CGNAT4:
+        return False
+    return True
 
 
-def analyze_log(path: str, log_type: str) -> dict:
-    """Extrait les IP et l'activité suspecte d'un fichier de log."""
-    patterns = SUSPICIOUS_AUTH if log_type == "auth" else SUSPICIOUS_WEB
-    ip_hits: collections.Counter = collections.Counter()
-    ip_signatures: dict[str, set] = collections.defaultdict(set)
-    total_lines = 0
+def _decode_twice(text: str) -> str:
+    """Double passe d'URL-décodage (gère %20, +, /**/ et les doubles encodages)."""
+    return urllib.parse.unquote_plus(urllib.parse.unquote_plus(text))
 
-    with open(path, "r", errors="ignore") as f:
-        for line in f:
-            total_lines += 1
-            ips = [ip for ip in IP_RE.findall(line) if is_public_ip(ip)]
-            if not ips:
+
+# ---------------------------------------------------------------------------
+# Extraction de l'IP cliente selon le type de log.
+# ---------------------------------------------------------------------------
+def extract_client_ip_web(line: str) -> str | None:
+    """nginx/apache « combined » : le 1er champ est $remote_addr (l'IP cliente)."""
+    stripped = line.strip()
+    if not stripped:
+        return None
+    first = stripped.split(maxsplit=1)[0]
+    return normalise_ip(first)
+
+
+def extract_client_ip_auth(line: str) -> str | None:
+    """sshd : IP après `rhost=` / `from … port` / `authenticating user … port`."""
+    for rx in _RE_AUTH_IP:
+        m = rx.search(line)
+        if m:
+            ip = normalise_ip(m.group(1))
+            if ip:
+                return ip
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Horodatage (first_seen / last_seen).
+# ---------------------------------------------------------------------------
+def timestamp_web(line: str) -> str | None:
+    m = _RE_TS_WEB.search(line)
+    if not m:
+        return None
+    tok = m.group(1)
+    try:
+        dt = datetime.strptime(tok, "%d/%b/%Y:%H:%M:%S %z")
+        return dt.astimezone(timezone.utc).isoformat()
+    except ValueError:
+        return tok  # présent mais non normalisable : on garde le brut
+
+
+def timestamp_auth(line: str) -> str | None:
+    m = _RE_TS_ISO.match(line.strip())
+    if m:
+        return m.group(1)
+    m = _RE_TS_SYSLOG.match(line.strip())
+    if m:
+        return m.group(1)  # syslog sans année : présent mais ambigu, gardé brut
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Détection des signatures sur une ligne.
+# ---------------------------------------------------------------------------
+def signatures_web(haystack_raw: str) -> list[str]:
+    haystack = haystack_raw + "\n" + _decode_twice(haystack_raw)
+    return [label for rx, label in SUSPICIOUS_WEB if rx.search(haystack)]
+
+
+def signatures_auth(line: str) -> list[str]:
+    return [label for rx, label in SUSPICIOUS_AUTH if rx.search(line)]
+
+
+def _open_log(path: str):
+    """Ouvre le log, en décompressant .gz de façon transparente (TI-13)."""
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt", errors="ignore")
+    return open(path, "rt", errors="ignore")
+
+
+def analyze_log(path: str, log_type: str, max_samples: int) -> dict:
+    """Extrait l'IP cliente et l'activité suspecte, une ligne = un décompte."""
+    hits: collections.Counter = collections.Counter()
+    signatures: dict[str, set] = collections.defaultdict(set)
+    samples: dict[str, dict[str, list]] = collections.defaultdict(
+        lambda: collections.defaultdict(list))
+    first_seen: dict[str, str] = {}
+    last_seen: dict[str, str] = {}
+    keyprobe: collections.Counter = collections.Counter()
+
+    lines_total = 0
+    lines_with_ip = 0
+    lines_malformed = 0
+
+    def add_sample(ip: str, label: str, line_no: int, line: str) -> None:
+        bucket = samples[ip][label]
+        if len(bucket) < max_samples:
+            bucket.append({"line_no": line_no,
+                           "raw_line_excerpt": line.rstrip("\n")[:280]})
+
+    with _open_log(path) as f:
+        for line_no, line in enumerate(f, start=1):
+            lines_total += 1
+            ip = None
+            matched: list[str] = []
+            ts = None
+
+            if log_type == "honeypot":
+                line_stripped = line.strip()
+                if not line_stripped:
+                    continue
+                try:
+                    rec = json.loads(line_stripped)
+                except json.JSONDecodeError:
+                    lines_malformed += 1
+                    continue
+                ip = normalise_ip(str(rec.get("source_ip", "")))
+                ts = rec.get("ts")
+                # Dans un honeypot, TOUTE interaction est un indicateur en soi.
+                blob = " ".join(str(rec.get(k, "")) for k in
+                                ("path", "body", "user_agent", "client_banner", "note"))
+                matched = ["honeypot_interaction"] + signatures_web(blob)
+            elif log_type == "auth":
+                ip = extract_client_ip_auth(line)
+                ts = timestamp_auth(line)
+                matched = signatures_auth(line)
+                if RE_KEYPROBE.search(line) and ip and is_public_ip(ip):
+                    keyprobe[ip] += 1
+                    add_sample(ip, "ssh_bruteforce_keyprobe", line_no, line)
+            else:  # web
+                ip = extract_client_ip_web(line)
+                ts = timestamp_web(line)
+                matched = signatures_web(line)
+
+            if not ip or not is_public_ip(ip):
                 continue
-            matched = [label for rx, label in patterns if re.search(rx, line)]
-            for ip in ips:
-                ip_hits[ip] += 1
-                for label in matched:
-                    ip_signatures[ip].add(label)
+
+            lines_with_ip += 1
+            hits[ip] += 1
+            if ip not in first_seen:
+                first_seen[ip] = ts or "inconnu"
+            last_seen[ip] = ts or "inconnu"
+            for label in matched:
+                signatures[ip].add(label)
+                add_sample(ip, label, line_no, line)
+
+    # Promotion conservatrice du brute-force par clé (TI-14).
+    for ip, n in keyprobe.items():
+        if n >= SSH_KEYPROBE_MIN:
+            signatures[ip].add("ssh_bruteforce_keyprobe")
 
     return {
-        "total_lines": total_lines,
-        "ip_hits": ip_hits,
-        "ip_signatures": {k: sorted(v) for k, v in ip_signatures.items()},
+        "lines_total": lines_total,
+        "lines_with_ip": lines_with_ip,
+        "lines_skipped": lines_total - lines_with_ip,
+        "lines_malformed": lines_malformed,
+        "hits": hits,
+        "signatures": {k: sorted(v) for k, v in signatures.items()},
+        "samples": samples,
+        "first_seen": first_seen,
+        "last_seen": last_seen,
     }
 
 
-def enrich_abuseipdb(ip: str) -> dict:
-    """Interroge la base PUBLIQUE AbuseIPDB (réputation de l'IP). Ne touche pas l'IP."""
+# ---------------------------------------------------------------------------
+# Allowlist (--exclude) : IP / CIDR connus (admin, supervision).
+# ---------------------------------------------------------------------------
+def load_exclusions(path: str | None) -> list:
+    nets = []
+    if not path:
+        return nets
+    try:
+        with open(path, "r", errors="ignore") as f:
+            for raw in f:
+                entry = raw.split("#", 1)[0].strip()
+                if not entry:
+                    continue
+                try:
+                    nets.append(ipaddress.ip_network(entry, strict=False))
+                except ValueError:
+                    print(f"[avertissement] entrée --exclude ignorée : {entry!r}",
+                          file=sys.stderr)
+    except OSError as e:
+        print(f"[avertissement] --exclude illisible ({e}) — ignoré", file=sys.stderr)
+    return nets
+
+
+def is_excluded(ip: str, nets: list) -> bool:
+    if not nets:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in nets)
+
+
+# ---------------------------------------------------------------------------
+# Enrichissement AbuseIPDB (PUBLIC). `requests` importé PARESSEUSEMENT (TI-11).
+# ---------------------------------------------------------------------------
+def enrich_abuseipdb(ip: str) -> tuple[dict, bool]:
+    """Interroge la base PUBLIQUE AbuseIPDB. Ne contacte JAMAIS l'IP analysée.
+
+    Renvoie (resultat, halt) ; halt=True sur 401/429 pour stopper les requêtes
+    suivantes (clé invalide ou quota épuisé) — TI-07.
+    """
     if not ABUSEIPDB_KEY:
-        return {"error": "ABUSEIPDB_KEY non définie — enrichissement ignoré"}
+        return ({"status": "non_enrichi",
+                 "note": "ABUSEIPDB_KEY non définie — mode hors-ligne"}, False)
+    try:
+        import requests  # import PARESSEUX : seulement si une clé est présente
+    except ImportError:
+        return ({"status": "error",
+                 "error": "module 'requests' absent "
+                          "(apt install python3-requests ou venv)"}, False)
     try:
         r = requests.get(
             "https://api.abuseipdb.com/api/v2/check",
@@ -108,27 +362,73 @@ def enrich_abuseipdb(ip: str) -> dict:
             headers={"Key": ABUSEIPDB_KEY, "Accept": "application/json"},
             timeout=15,
         )
+    except Exception as e:  # pragma: no cover - réseau
+        return ({"status": "error", "error": f"requête échouée : {e}"}, False)
+
+    if r.status_code != 200:
+        detail = ""
+        try:
+            body = r.json()
+            errs = body.get("errors") if isinstance(body, dict) else None
+            if errs:
+                detail = errs[0].get("detail", "")
+        except Exception:
+            detail = (r.text or "")[:200]
+        halt = r.status_code in (401, 429)
+        return ({"status": "error",
+                 "error": f"HTTP {r.status_code}: {detail or 'réponse non-200'}"}, halt)
+
+    try:
         d = r.json().get("data", {})
-        return {
-            "abuse_score": d.get("abuseConfidenceScore"),
-            "country": d.get("countryCode"),
-            "isp": d.get("isp"),
-            "domain": d.get("domain"),
-            "total_reports": d.get("totalReports"),
-            "last_reported": d.get("lastReportedAt"),
-        }
-    except Exception as e:  # pragma: no cover
-        return {"error": str(e)}
+    except Exception as e:
+        return ({"status": "error", "error": f"JSON invalide : {e}"}, False)
+    return ({
+        "status": "ok",
+        "abuse_score": d.get("abuseConfidenceScore"),
+        "country": d.get("countryCode"),
+        "isp": d.get("isp"),
+        "domain": d.get("domain"),
+        "total_reports": d.get("totalReports"),
+        "last_reported": d.get("lastReportedAt"),
+    }, False)
+
+
+def _risk_flag(rep: dict) -> tuple[str, str]:
+    """(pictogramme, score affiché). '?' quand le score est INCONNU (pas faible)."""
+    score = rep.get("abuse_score") if rep.get("status") == "ok" else None
+    if score is None:
+        return "❓", "?"
+    if score >= 75:
+        return "🔴", str(score)
+    if score >= 25:
+        return "🟠", str(score)
+    return "🟢", str(score)
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Threat intelligence défensif")
-    ap.add_argument("logfile", help="Chemin du fichier de log à analyser")
-    ap.add_argument("--type", choices=["web", "auth"], default="web",
-                    help="Type de log (web=Nginx/Apache, auth=SSH)")
-    ap.add_argument("--top", type=int, default=20, help="Nombre d'IP à enrichir")
-    ap.add_argument("--min-hits", type=int, default=5,
-                    help="Seuil minimal d'occurrences pour retenir une IP")
+    ap.add_argument("logfile", help="Chemin du fichier de log à analyser (.gz accepté)")
+    ap.add_argument("--type", choices=["web", "auth", "honeypot"], default="web",
+                    help="Type de log (web=Nginx/Apache, auth=SSH, honeypot=JSON)")
+    ap.add_argument("--top", type=int, default=20, help="Nombre max d'IP à retenir")
+    ap.add_argument("--min-hits", type=int, default=1,
+                    help="Seuil d'occurrences, appliqué APRÈS le filtre par signature")
+    ap.add_argument("--samples", type=int, default=3,
+                    help="Nombre max d'extraits de preuve par signature et par IP")
+    ap.add_argument("--exclude", metavar="FICHIER",
+                    help="Allowlist d'IP/CIDR de confiance (admin, supervision)")
+    ap.add_argument("--mandat-ref", metavar="REF",
+                    help="Référence du mandat ayant autorisé l'analyse")
+    ap.add_argument("--out", metavar="FICHIER",
+                    help="Chemin du dossier de sortie (refuse d'écraser un fichier existant)")
     args = ap.parse_args()
 
     if not os.path.isfile(args.logfile):
@@ -136,44 +436,152 @@ def main() -> int:
         return 1
 
     print(f"=== Analyse de {args.logfile} (type: {args.type}) ===\n")
-    res = analyze_log(args.logfile, args.type)
-    print(f"Lignes analysées : {res['total_lines']}")
-    print(f"IP publiques distinctes : {len(res['ip_hits'])}\n")
+    res = analyze_log(args.logfile, args.type, max_samples=args.samples)
 
-    # Top des IP les plus actives au-dessus du seuil
-    top_ips = [(ip, n) for ip, n in res["ip_hits"].most_common() if n >= args.min_hits]
-    top_ips = top_ips[: args.top]
+    if res["lines_total"] == 0:
+        print(f"[avertissement] {args.logfile} ne contient aucune ligne "
+              f"(log vide ou rotation .gz corrompue ?) — dossier vide.",
+              file=sys.stderr)
+
+    print(f"Lignes analysées        : {res['lines_total']}")
+    print(f"Lignes avec IP cliente  : {res['lines_with_ip']}")
+    print(f"Lignes ignorées         : {res['lines_skipped']}")
+    if res["lines_malformed"]:
+        print(f"Lignes JSON malformées  : {res['lines_malformed']}")
+    print(f"IP publiques distinctes : {len(res['hits'])}\n")
+
+    excl = load_exclusions(args.exclude)
+    hits = res["hits"]
+    sigs = res["signatures"]
+
+    excluded_ips = sorted(ip for ip in hits if is_excluded(ip, excl))
+
+    # TI-04 : seules les IP avec >=1 signature deviennent des indicateurs.
+    indicator_ips = [ip for ip in hits
+                     if sigs.get(ip) and not is_excluded(ip, excl)]
+    # Classement : d'abord nb de signatures DISTINCTES, puis nb de requêtes.
+    indicator_ips.sort(key=lambda ip: (len(sigs[ip]), hits[ip]), reverse=True)
+    # --min-hits appliqué APRÈS le filtre par signature.
+    indicator_ips = [ip for ip in indicator_ips if hits[ip] >= args.min_hits]
+    indicator_ips = indicator_ips[: args.top]
+
+    # Contexte : IP volumineuses SANS signature (visiteurs normaux). NON enrichi.
+    benign_ips = [ip for ip in hits
+                  if not sigs.get(ip) and not is_excluded(ip, excl)]
+    benign_ips.sort(key=lambda ip: hits[ip], reverse=True)
+    benign_ips = benign_ips[: args.top]
 
     report = {
         "generated_utc": datetime.now(timezone.utc).isoformat(),
-        "source_log": args.logfile,
-        "log_type": args.type,
+        "tool_version": TOOL_VERSION,
+        "host": socket.gethostname(),
+        "mandat_ref": args.mandat_ref,
+        "params": {
+            "logfile": args.logfile,
+            "type": args.type,
+            "top": args.top,
+            "min_hits": args.min_hits,
+            "samples": args.samples,
+            "exclude": args.exclude,
+        },
+        "source": {
+            "abspath": os.path.abspath(args.logfile),
+            "sha256": sha256_file(args.logfile),
+            "size": os.path.getsize(args.logfile),
+            "mtime_utc": datetime.fromtimestamp(
+                os.path.getmtime(args.logfile), timezone.utc).isoformat(),
+            "log_type": args.type,
+        },
+        "stats": {
+            "lines_total": res["lines_total"],
+            "lines_with_ip": res["lines_with_ip"],
+            "lines_skipped": res["lines_skipped"],
+            "lines_malformed": res["lines_malformed"],
+            "distinct_public_ips": len(hits),
+            "suspects": len(indicator_ips),
+            "benign_context": len(benign_ips),
+            "excluded_ips": len(excluded_ips),
+        },
+        "excluded_ips": excluded_ips,
         "indicators": [],
+        "contexte": [],
     }
 
-    print(f"--- Top {len(top_ips)} IP suspectes (enrichissement réputation) ---\n")
-    for ip, hits in top_ips:
-        sigs = res["ip_signatures"].get(ip, [])
-        intel = enrich_abuseipdb(ip)
-        score = intel.get("abuse_score")
-        flag = "🔴" if (score or 0) >= 75 else ("🟠" if (score or 0) >= 25 else "⚪")
-        print(f"{flag} {ip}  | {hits} req | score abus: {score} "
-              f"| {intel.get('country')} | {intel.get('isp')}")
-        if sigs:
-            print(f"     signatures: {', '.join(sigs)}")
+    offline = not ABUSEIPDB_KEY
+    mode = "hors-ligne, pas d'enrichissement" if offline else "enrichissement réputation"
+    print(f"--- {len(indicator_ips)} IP suspecte(s) ({mode}) ---\n")
+
+    enrichment_stopped = False
+    for ip in indicator_ips:
+        ip_sigs = sigs.get(ip, [])
+        if enrichment_stopped:
+            rep = {"status": "non_interroge",
+                   "note": "enrichissement interrompu (HTTP 401/429 précédent)"}
+        else:
+            rep, halt = enrich_abuseipdb(ip)
+            if halt:
+                enrichment_stopped = True
+                print(f"[AVERTISSEMENT] AbuseIPDB a renvoyé {rep.get('error')} — "
+                      f"arrêt de l'enrichissement des IP suivantes.", file=sys.stderr)
+
+        flag, score_disp = _risk_flag(rep)
+        print(f"{flag} {ip}  | {hits[ip]} req | {len(ip_sigs)} sig | "
+              f"score abus: {score_disp} | {rep.get('country', '?')} | {rep.get('isp', '?')}")
+        if ip_sigs:
+            print(f"     signatures: {', '.join(ip_sigs)}")
+
+        # Extraits de preuve, limités aux signatures réellement retenues pour l'IP.
+        ip_samples = {label: res["samples"].get(ip, {}).get(label, [])
+                      for label in ip_sigs if res["samples"].get(ip, {}).get(label)}
+
         report["indicators"].append({
             "ip": ip,
-            "request_count": hits,
-            "attack_signatures": sigs,
-            "reputation": intel,
+            "request_count": hits[ip],
+            "signature_count": len(ip_sigs),
+            "attack_signatures": ip_sigs,
+            "first_seen": res["first_seen"].get(ip, "inconnu"),
+            "last_seen": res["last_seen"].get(ip, "inconnu"),
+            "samples": ip_samples,
+            "reputation": rep,
         })
 
-    # Sauvegarde du dossier (pour les autorités)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = f"dossier-threat-intel_{ts}.json"
-    with open(out, "w") as f:
-        json.dump(report, f, indent=2, ensure_ascii=False)
+    for ip in benign_ips:
+        report["contexte"].append({
+            "ip": ip,
+            "request_count": hits[ip],
+            "first_seen": res["first_seen"].get(ip, "inconnu"),
+            "last_seen": res["last_seen"].get(ip, "inconnu"),
+            "note": "aucune signature d'attaque — contexte uniquement, non enrichi",
+        })
+
+    # ---- Écriture du dossier : nom unique, refus d'écrasement (TI-09) ----
+    if args.out:
+        out = args.out
+    else:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+        out = f"dossier-threat-intel_{ts}_{uuid.uuid4().hex[:8]}.json"
+    try:
+        # mode 'x' : échoue si le fichier existe déjà (jamais d'écrasement).
+        with open(out, "x", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+    except FileExistsError:
+        print(f"[erreur] le dossier existe déjà, écrasement refusé : {out}",
+              file=sys.stderr)
+        return 1
+
+    # Empreinte d'intégrité du dossier (format sha256sum).
+    digest = sha256_file(out)
+    sha_path = out + ".sha256"
+    try:
+        with open(sha_path, "x", encoding="utf-8") as f:
+            f.write(f"{digest}  {os.path.basename(out)}\n")
+    except FileExistsError:
+        print(f"[avertissement] {sha_path} existe déjà — empreinte non réécrite.",
+              file=sys.stderr)
+
     print(f"\n=== Dossier enregistré : {out} ===")
+    print(f"    SHA-256 : {digest}")
+    print(f"    Empreinte : {sha_path}")
     print("Ce dossier (IOC + réputation) est transmissible aux autorités pour")
     print("l'attribution. Aucune machine attaquante n'a été contactée.")
     return 0
