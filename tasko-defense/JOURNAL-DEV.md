@@ -58,6 +58,32 @@ ZAP (`zap-auth.yaml` + lanceur `zap-auth.sh` cadré par le mandat), chacun contr
 liste précise de défauts de l'audit et du critique. Tests locaux uniquement (127.0.0.1,
 réseau simulé, stubs), aucun scan réel. Détails dans le CHANGELOG et les commits.
 
+Composants livrés (tous testés) :
+- **honeypot.py** : ThreadingHTTPServer + timeout (plus de blocage), Content-Length
+  plafonné, toutes les méthodes journalisées, bind avant threads (échec visible),
+  journal configurable + rotation, pas de secrets dans journald.
+- **threat-intel.py** : IP extraite du bon champ (fin des fausses IP manipulables),
+  payloads encodés détectés, seules les IP à signature retenues, IPv6, erreurs
+  AbuseIPDB gérées, dossier horodaté/haché + sidecar .sha256, requests en différé.
+- **collecte-preuves.sh** : intégrité réparée (MANIFEST vérifiable), destination
+  externe obligatoire, plus de faux succès disque plein, contrôle root, artefacts
+  de persistance collectés, replis sans net-tools.
+- **zap-auth.yaml + zap-auth.sh** : regex de session corrigée, périmètre resserré,
+  scan actif non destructeur (XSS persistant OFF), rapports horodatés, lanceur
+  qui exige le mandat (test_authentifie) avant docker.
+
+### Vérification finale
+`python3 -m py_compile` sur tout le Python, `bash -n` sur tous les scripts, parsing
+YAML des mandats et du plan ZAP, 22/22 tests du moteur, verrou qui refuse le mandat
+non signé (exit 2). Arbre propre. Prêt à pousser.
+
+### Reste à faire (itérations futures)
+- Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
+  critique (quelques formulations à nuancer).
+- Faire relire les modèles juridiques (mandat, Annexe D) par un juriste Tchad/CEMAC.
+- Déployer et régler Wazuh (règle locale fournie) sur une vraie infrastructure.
+- Tests d'intégration bout-en-bout sur un banc d'essai dédié (jamais en production).
+
 > Note de méthode (capture du développement) : je ne peux pas enregistrer l'écran,
 > mais ce journal + l'historique Git (commits atomiques, messages détaillés) + les
 > preuves de test dans chaque message de commit constituent la trace complète et

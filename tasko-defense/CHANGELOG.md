@@ -24,11 +24,19 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   `vuln and safe and not external` (plus de scripts dos/intrusive/exploit, ni d'envoi
   de versions à des tiers) ; rapports en permissions 700.
 
-### Corrigé (durcissement des composants — en cours)
-- `outils/honeypot.py` : voir commit dédié.
-- `outils/threat-intel.py` : voir commit dédié.
-- `outils/incident/collecte-preuves.sh` : voir commit dédié.
-- `outils/scan/zap-auth.yaml` + `zap-auth.sh` : voir commit dédié.
+### Corrigé (durcissement des composants)
+- `outils/honeypot.py` : ThreadingHTTPServer + timeout, Content-Length plafonné,
+  toutes les méthodes journalisées, bind avant threads, journal configurable +
+  rotation, pas de secrets dans journald, champ `srcip`.
+- `outils/threat-intel.py` : IP cliente extraite du bon champ, payloads encodés
+  détectés, seules les IP à signature retenues (+ allowlist), IPv6, erreurs
+  AbuseIPDB gérées, dossier enrichi + `.sha256`, `requests` en différé.
+- `outils/incident/collecte-preuves.sh` : intégrité réparée, destination externe
+  obligatoire, plus de faux succès disque plein, contrôle root, persistances
+  collectées, replis sans net-tools.
+- `outils/scan/zap-auth.yaml` + `zap-auth.sh` : regex de session corrigée,
+  périmètre resserré, scan actif non destructeur, rapports horodatés, lanceur
+  cadré par le mandat (type `test_authentifie`).
 
 ### Retiré
 - Dossier parasite `{outils,mandat,docs}` présent dans l'archive v2.
