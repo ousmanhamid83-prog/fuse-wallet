@@ -11,3 +11,5 @@ __pycache__/
 mandats/*.mandat.yaml
 !mandats/exemple.mandat.yaml
 !mandats/tchadone.mandat.yaml
+*.pid
+*.service-test

@@ -1,91 +1,206 @@
-# zap-auth.yaml — Scan ZAP AUTHENTIFIÉ (derrière le login).
-# C'est CE scan qui révèle les failles que le scan public ne voit pas.
+# zap-auth.yaml — Scan ZAP AUTHENTIFIE (derriere le login), cadre par un MANDAT signe.
+# C'est CE scan qui revele les failles que le scan public ne voit pas.
 #
-# Lancement (Docker) :
-#   docker run -v $(pwd):/zap/wrk/ -t ghcr.io/zaproxy/zaproxy:stable \
+# NE PAS lancer ce fichier a la main. Passe TOUJOURS par ./zap-auth.sh :
+#   le lanceur verifie le MANDAT (type test_authentifie) AVANT de demarrer ZAP.
+#   Rien n'est scanne tant que le garde de mandat n'a pas renvoye 0.
+#
+# ATTENTION — CIBLE : ce scan AUTHENTIFIE attaque derriere le login. Il doit
+#   viser une copie de PRE-PRODUCTION / STAGING, JAMAIS la production avec de
+#   vraies donnees clients (mandat §2.4 : ne pas creer / modifier / supprimer
+#   de donnees reelles). Les regles qui ecrivent des donnees sont desactivees
+#   ci-dessous, mais une copie de pre-prod reste obligatoire.
+#
+# Commande Docker SOUS-JACENTE (executee par zap-auth.sh, documentee ici) :
+#   # Le dossier courant doit appartenir a l'uid 1000 (utilisateur ZAP du conteneur),
+#   # sinon ZAP ne pourra pas ecrire les rapports dans le volume monte :
+#   sudo chown 1000:1000 "$PWD"        # ou un dossier de rapports dedie, possede par 1000
+#   docker run --rm -v "$(pwd)":/zap/wrk/:rw \
+#     -e ZAP_USER -e ZAP_PWD \
+#     -t ghcr.io/zaproxy/zaproxy:stable \
 #     zap.sh -cmd -autorun /zap/wrk/zap-auth.yaml
+#   # -e ZAP_USER -e ZAP_PWD : transmet les identifiants au conteneur. Sans eux,
+#   #   ZAP se connecterait avec le LITTERAL « ${ZAP_USER} » / « ${ZAP_PWD} » (echec).
+#   # :rw : le volume doit etre accessible en ecriture pour deposer les rapports.
 #
-# Avant : remplace l'URL, les chemins de login, et les identifiants par les tiens.
+# Avant : remplace l'URL, les chemins de login, et adapte le contexte a ton site.
 # Les identifiants viennent de variables d'environnement (jamais en dur).
 
 env:
   contexts:
     - name: "site-authentifie"
       urls:
+        # ADAPTE : URL racine du site (idealement la copie STAGING / pre-prod).
+        # 'urls' cadre deja le perimetre : tout ce qui est sous cette URL est inclus.
         - "https://ton-site.cm/"
-      includePaths:
-        - "https://ton-site.cm.*"
+      # (ZAP-5) PAS de 'includePaths' ici. Un include non ancre comme
+      #   'https://ton-site.cm.*' matcherait AUSSI https://ton-site.cm.evil.net
+      #   (le '.' n'est pas echappe et il n'y a pas d'ancrage). 'urls' suffit a
+      #   cadrer le contexte. Si tu DOIS vraiment restreindre, ancre la regex :
+      #   includePaths:
+      #     - "https://ton-site\\.cm(/.*)?"
       excludePaths:
-        - "https://ton-site.cm/logout.*"   # ne pas se déconnecter pendant le scan
+        - "https://ton-site.cm/logout.*"   # ne pas se deconnecter pendant le scan
         - ".*\\.(png|jpg|css|js|woff2?)$"   # ignorer les ressources statiques
       authentication:
         method: "form"
         parameters:
           loginPageUrl: "https://ton-site.cm/login"
           loginRequestUrl: "https://ton-site.cm/login"
-          # Adapte les NOMS de champs à ton formulaire (inspecte le HTML du login)
+          # Adapte les NOMS de champs a ton formulaire (inspecte le HTML du login)
           loginRequestBody: "username={%username%}&password={%password%}"
         verification:
           method: "response"
-          # Regex qui prouve qu'on EST connecté (ex. redirection vers /dashboard)
-          loggedInRegex: '.*\\Q/dashboard\\E.*'
-          # Regex qui prouve qu'on est DÉCONNECTÉ (réapparition du login)
-          loggedOutRegex: '.*\\Q/login\\E.*'
+          # (ZAP-1) Regex Java. En YAML entre quotes SIMPLES, un backslash reste
+          #   un backslash : on met donc UN SEUL backslash (pas deux). ZAP utilise
+          #   find(), donc pas besoin de .* autour du motif.
+          #   ADAPTE /dashboard et /login aux vraies URLs de ton site.
+          loggedInRegex: '\Q/dashboard\E'    # prouve qu'on EST connecte (ex. redirection vers /dashboard)
+          loggedOutRegex: '\Q/login\E'       # prouve qu'on est DECONNECTE (reapparition du login)
       sessionManagement:
         method: "cookie"
       users:
         - name: "compte-audit"
           credentials:
-            # Définis ces variables avant de lancer :
-            #   export ZAP_USER="...", export ZAP_PWD="..."
+            # Fournis via -e ZAP_USER / -e ZAP_PWD (voir en-tete). Jamais en dur.
             username: "${ZAP_USER}"
             password: "${ZAP_PWD}"
   parameters:
     failOnError: true
+    # (ZAP-7) Abandonne aussi sur AVERTISSEMENT : si ${ZAP_USER}/${ZAP_PWD} ne
+    #   sont pas definis (ou mal substitues), mieux vaut echouer que scanner
+    #   avec des identifiants bidons. Les rapports (alwaysRun) sortent quand meme.
+    failOnWarning: true
     progressToStdout: true
 
 jobs:
-  # 1. Configure l'analyse passive (sans danger, observe seulement)
+  # 1. Analyse passive (sans danger : observe seulement, ne soumet rien)
   - type: passiveScan-config
     parameters:
       scanOnlyInScope: true
 
-  # 2. Explore le site en étant connecté
+  # 2. Exploration classique, en etant connecte — SANS soumettre de formulaire.
   - type: spider
     parameters:
       context: "site-authentifie"
       user: "compte-audit"
       maxDuration: 10
+      # (critic #3) Ne PAS soumettre ni traiter les formulaires : evite de creer
+      #   ou modifier de vrais enregistrements (inscriptions, commandes, messages...).
+      postForm: false
+      processForm: false
 
-  # 3. Explore aussi le contenu JavaScript / SPA (Vue, React...)
+  # 3. Exploration JavaScript / SPA (Vue, React...) — sans remplir ni soumettre.
   - type: spiderAjax
     parameters:
       context: "site-authentifie"
       user: "compte-audit"
       maxDuration: 15
+      # (critic #3) Pas de saisie aleatoire dans les champs (randomInputs: false),
+      #   et on ne clique QUE les liens <a> (clickDefaultElems: false + elements: [a]) :
+      #   on evite ainsi de cliquer des boutons / inputs qui soumettraient un
+      #   formulaire et ecriraient des donnees. logoutAvoidance evite la deconnexion.
+      randomInputs: false
+      clickDefaultElems: false
+      elements:
+        - "a"
+      logoutAvoidance: true
 
   # 4. Attend la fin de l'analyse passive
   - type: passiveScan-wait
     parameters:
       maxDuration: 5
 
-  # 5. Analyse ACTIVE (teste réellement les vulnérabilités, en zone autorisée)
+  # 5. Analyse ACTIVE — attaque reellement : reservee a la PRE-PROD (voir en-tete).
+  #    (critic #3) On n'utilise PAS la « Default Policy » complete. On definit une
+  #    policy en LISTE BLANCHE via 'policyDefinition' (utilisee uniquement si
+  #    'policy' n'est PAS defini) :
+  #      - defaultThreshold: Off  => TOUTES les regles sont desactivees au depart ;
+  #      - on n'active ensuite QUE des regles de detection d'injection orientees
+  #        lecture (SQLi, XSS reflechi, injection de commande/code, path traversal).
+  #    Les regles qui ECRIVENT des donnees (XSS PERSISTANT 40014 / 40016 / 40017)
+  #    restent donc desactivees — explicitement rappelees ci-dessous.
   - type: activeScan
     parameters:
       context: "site-authentifie"
       user: "compte-audit"
-      policy: "Default Policy"
+      # (ZAP-6) Bornes de charge pour un hebergement mutualise/partage.
+      #   NB : sur le job activeScan la duree totale s'appelle 'maxScanDurationInMins'
+      #   (il n'existe pas de 'maxDuration' sur ce job).
+      maxScanDurationInMins: 60    # duree totale max du scan actif
+      maxRuleDurationInMins: 10    # duree max par regle
+      threadPerHost: 2             # peu de threads -> faible charge sur l'hote
+      delayInMs: 200               # pause entre requetes -> menage l'hote partage
+    policyDefinition:
+      defaultStrength: "Low"       # peu de variantes de payload -> moins de requetes
+      defaultThreshold: "Off"      # TOUT desactive par defaut (liste blanche ci-dessous)
+      rules:
+        # --- Regles de detection d'injection (ne persistent pas de donnees) ---
+        - id: 40018
+          name: "SQL Injection"
+          threshold: "Medium"
+        - id: 40019
+          name: "SQL Injection - MySQL (Time Based)"
+          threshold: "Medium"
+        - id: 40020
+          name: "SQL Injection - Hypersonic (Time Based)"
+          threshold: "Medium"
+        - id: 40021
+          name: "SQL Injection - Oracle (Time Based)"
+          threshold: "Medium"
+        - id: 40022
+          name: "SQL Injection - PostgreSQL (Time Based)"
+          threshold: "Medium"
+        - id: 40024
+          name: "SQL Injection - SQLite (Time Based)"
+          threshold: "Medium"
+        - id: 40012
+          name: "Cross Site Scripting (Reflected)"
+          threshold: "Medium"
+        - id: 90019
+          name: "Server Side Code Injection"
+          threshold: "Medium"
+        - id: 90020
+          name: "Remote OS Command Injection"
+          threshold: "Medium"
+        - id: 6
+          name: "Path Traversal"
+          threshold: "Medium"
+        - id: 7
+          name: "Remote File Inclusion"
+          threshold: "Medium"
+        # --- XSS PERSISTANT laisse DESACTIVE (ecrit/stocke des donnees) ---
+        #   Deja Off par defaut ; rendu explicite ici pour ne jamais le reactiver
+        #   par megarde sur une cible contenant de vraies donnees (mandat §2.4).
+        - id: 40014
+          name: "Cross Site Scripting (Persistent)"
+          threshold: "Off"
+        - id: 40016
+          name: "Cross Site Scripting (Persistent) - Prime"
+          threshold: "Off"
+        - id: 40017
+          name: "Cross Site Scripting (Persistent) - Spider"
+          threshold: "Off"
+    # (ZAP-3) Pas strictement necessaire ici (c'est un job de scan), laisse a false.
+    alwaysRun: false
 
   # 6. Rapport HTML lisible
   - type: report
     parameters:
       template: "traditional-html"
       reportDir: "/zap/wrk"
-      reportFile: "rapport-zap-auth.html"
+      # (critic #4) Nom HORODATE + site : {{...}} = motif date Java, [[site]] = site.
+      #   Les rapports ne s'ecrasent plus entre executions / clients -> historique garde.
+      reportFile: "{{yyyy-MM-dd-HH-mm-ss}}-ZAP-auth-[[site]].html"
+    # (ZAP-3) alwaysRun : le rapport est genere MEME si un job precedent a echoue
+    #   (ou si le plan s'arrete tot sur failOnWarning) -> on ne perd jamais les resultats.
+    alwaysRun: true
 
-  # 7. Rapport JSON (pour suivi/comparaison dans le temps)
+  # 7. Rapport JSON (pour suivi / comparaison dans le temps)
   - type: report
     parameters:
       template: "traditional-json"
       reportDir: "/zap/wrk"
-      reportFile: "rapport-zap-auth.json"
+      reportFile: "{{yyyy-MM-dd-HH-mm-ss}}-ZAP-auth-[[site]].json"
+    # (ZAP-3) idem : le rapport JSON sort meme en cas d'erreur de scan.
+    alwaysRun: true
