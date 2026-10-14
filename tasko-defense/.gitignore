@@ -1,0 +1,13 @@
+# Sorties d'exécution — ne jamais committer (peuvent contenir des données client)
+outils/scan/rapports/
+outils/scan/rapports-reseau/
+outils/scan/sites.txt
+outils/**/preuves_*/
+outils/**/*.log
+dossier-threat-intel_*.json
+__pycache__/
+*.pyc
+# Mandats réels (données client) : ne versionne que les gabarits *.exemple / tchadone
+mandats/*.mandat.yaml
+!mandats/exemple.mandat.yaml
+!mandats/tchadone.mandat.yaml

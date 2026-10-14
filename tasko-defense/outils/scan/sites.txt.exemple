@@ -1,0 +1,3 @@
+# Une URL https:// par ligne. Les lignes vides et les # sont ignorées.
+# Chaque cible doit être couverte par le mandat, sinon elle est ignorée (non scannée).
+https://exemple.cm/
