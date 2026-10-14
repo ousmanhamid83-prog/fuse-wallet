@@ -154,10 +154,12 @@ chiffré, et relance après correction pour vérifier.
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin honeypot
 sudo cp -r tasko-defense /opt/
 
-# 2) Ouvre SEULEMENT les ports honeypot, et ACTIVE le pare-feu.
-sudo ufw allow 2222/tcp   # faux SSH
-sudo ufw allow 8080/tcp   # faux panneau admin
-sudo ufw --force enable   # sans ça, les règles ne s'appliquent pas
+# 2) Ouvre les ports honeypot, et ACTIVE le pare-feu.
+# ⚠️ AVANT d'activer ufw : autorise ton VRAI SSH d'admin, sinon tu te verrouilles dehors.
+sudo ufw allow OpenSSH    # ou : sudo ufw allow 22/tcp (ton port SSH réel)
+sudo ufw allow 2222/tcp   # faux SSH (honeypot)
+sudo ufw allow 8080/tcp   # faux panneau admin (honeypot)
+sudo ufw enable           # sans ça, les règles ne s'appliquent pas
 ```
 
 Service systemd (`/etc/systemd/system/honeypot.service`) :
