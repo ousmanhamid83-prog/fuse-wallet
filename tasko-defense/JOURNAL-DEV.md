@@ -77,6 +77,28 @@ Composants livrés (tous testés) :
 YAML des mandats et du plan ZAP, 22/22 tests du moteur, verrou qui refuse le mandat
 non signé (exit 2). Arbre propre. Prêt à pousser.
 
+## 2026-10-15 — Volet « rouge » éthique : PoC Annexe D + mode purple
+
+Deux fonctionnalités demandées, en restant strictement défensif et éthique.
+
+- **`tasko/poc.py` (Annexe D)** : documente et **scelle** une PoC que l'opérateur
+  a réalisée à la main (autorisé). SHA-256 par preuve + sceau global du dossier,
+  rappel des limites Annexe D. **N'exécute aucune exploitation**, aucun réseau.
+  Refuse sans Annexe D signée / hors périmètre. 29 assertions.
+- **`tasko/purple.py` (`validation_detection`)** : rejoue des sondes **inertes
+  marquées** (canari) contre le honeypot/pré-prod pour vérifier la détection,
+  mesure DÉTECTÉ/NON DÉTECTÉ via le log honeypot, renvoie vers Wazuh. Boucle
+  locale autorisée sans mandat ; toute autre cible exige un mandat. **Garde de
+  cohérence** : hôte autorisé == hôte réellement contacté (sinon refus, 0 sonde).
+  Pas d'exploit, pas de DoS (1 requête/sonde, pause entre elles).
+- CLI : sous-commandes `poc` et `purple` câblées ; type `validation_detection`
+  ajouté au moteur. Suite complète : 4 fichiers de tests, tous verts. Chaîne
+  purple vérifiée contre le vrai honeypot local (5/5 sondes détectées).
+
+> Décision éthique maintenue : Tasko **n'automatise pas** l'exploitation. La ligne
+> « exploitation contrôlée » est active via le verrou (Annexe D) + le scellement
+> de preuve ; l'acte d'exploitation reste humain, autorisé et documenté.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

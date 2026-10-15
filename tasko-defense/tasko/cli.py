@@ -20,6 +20,8 @@ from . import __version__
 from .mandat import TYPES_TEST, Mandat, MandatError, autoriser
 from . import journal as _journal
 from . import rapport as _rapport
+from . import poc as _poc
+from . import purple as _purple
 
 CODE_OK = 0
 CODE_REFUSE = 2
@@ -149,6 +151,59 @@ def _cmd_rapport(args: argparse.Namespace) -> int:
     return CODE_OK
 
 
+def _cmd_poc(args: argparse.Namespace) -> int:
+    try:
+        mandat = Mandat.charger(args.mandat)
+    except MandatError as e:
+        print(f"ERREUR mandat : {e}", file=sys.stderr)
+        return CODE_ERREUR
+    finding = {"cible": args.cible, "titre": args.titre,
+               "reference": args.reference or "", "severite": args.severite or ""}
+    dossier = _poc.documenter(
+        mandat, finding, args.preuve or [], args.etapes, args.resultat,
+        operateur=args.operateur, ip_source=args.ip_source, journal=args.journal)
+    if not dossier.get("autorise"):
+        print(f"[REFUSÉ] {dossier.get('refus', 'non autorisé')}", file=sys.stderr)
+        print(">>> Aucune PoC scellée. L'exploitation exige un mandat couvrant la cible "
+              "avec l'Annexe D signée.", file=sys.stderr)
+        return CODE_REFUSE
+    if args.sortie:
+        cj, cm = _poc.ecrire(dossier, args.sortie + ".json", args.sortie + ".md")
+        print(f"PoC documentée et scellée : {cj} / {cm}")
+    else:
+        sys.stdout.write(_poc.rendre_markdown(dossier))
+    return CODE_OK
+
+
+def _cmd_purple(args: argparse.Namespace) -> int:
+    mandat = None
+    if args.mandat:
+        try:
+            mandat = Mandat.charger(args.mandat)
+        except MandatError as e:
+            print(f"ERREUR mandat : {e}", file=sys.stderr)
+            return CODE_ERREUR
+    rapport = _purple.rejouer(
+        args.cible, mandat=mandat, ip_source=args.ip_source, journal=args.journal,
+        reference=args.reference or "", honeypot_log=args.honeypot_log, pause=args.pause)
+    md = _purple.rendre_markdown(rapport)
+    if args.ssh and rapport.get("autorise"):
+        rssh = _purple.sonder_ssh(args.cible, port=args.ssh_port, mandat=mandat,
+                                  ip_source=args.ip_source, journal=args.journal,
+                                  reference=args.reference or "")
+        md += (f"\n## Sonde SSH (port {rssh.get('port')})\n\n"
+               f"- Canari : {rssh.get('canari')}\n"
+               f"- Bannière reçue : {rssh.get('banniere_recue')}\n"
+               f"- Envoyée : {rssh.get('envoyees')} | Erreur : {rssh.get('erreur')}\n")
+    if args.sortie:
+        with open(args.sortie, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"Rapport purple écrit : {args.sortie}")
+    else:
+        sys.stdout.write(md)
+    return CODE_OK if rapport.get("autorise") else CODE_REFUSE
+
+
 def construire_parseur() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tasko", description="Tasko Defense — outils cadrés par mandat")
     p.add_argument("--version", action="version", version=f"tasko {__version__}")
@@ -198,6 +253,34 @@ def construire_parseur() -> argparse.ArgumentParser:
     r.add_argument("--operateur", default=None)
     r.add_argument("--sortie", default=None, help="fichier .md de sortie (sinon stdout)")
     r.set_defaults(func=_cmd_rapport)
+
+    pc = sous.add_parser("poc", help="documente et scelle une PoC sous Annexe D (n'exécute rien)")
+    pc.add_argument("--mandat", required=True)
+    pc.add_argument("--cible", required=True)
+    pc.add_argument("--titre", required=True, help="intitulé du finding / de la faille")
+    pc.add_argument("--reference", default=None, help="CVE/CWE/ref template")
+    pc.add_argument("--severite", default=None)
+    pc.add_argument("--etapes", required=True, help="étapes de la PoC réalisées à la main")
+    pc.add_argument("--resultat", required=True, help="observation / preuve d'exploitabilité")
+    pc.add_argument("--preuve", action="append", help="fichier de preuve (répétable)")
+    pc.add_argument("--operateur", default=None)
+    pc.add_argument("--ip-source", default=None)
+    pc.add_argument("--journal", default=None)
+    pc.add_argument("--sortie", default=None, help="base du chemin (.json/.md seront créés)")
+    pc.set_defaults(func=_cmd_poc)
+
+    pu = sous.add_parser("purple", help="rejoue des sondes inertes pour valider la détection")
+    pu.add_argument("--cible", required=True, help="URL du honeypot/pré-prod (http://127.0.0.1:8080/)")
+    pu.add_argument("--mandat", default=None, help="requis si la cible n'est PAS en boucle locale")
+    pu.add_argument("--ip-source", default=None)
+    pu.add_argument("--journal", default=None)
+    pu.add_argument("--reference", default=None)
+    pu.add_argument("--honeypot-log", default=None, help="journal honeypot à relire pour mesurer la détection")
+    pu.add_argument("--pause", type=float, default=0.2, help="pause (s) entre sondes")
+    pu.add_argument("--ssh", action="store_true", help="ajoute une sonde SSH inerte")
+    pu.add_argument("--ssh-port", type=int, default=2222)
+    pu.add_argument("--sortie", default=None)
+    pu.set_defaults(func=_cmd_purple)
     return p
 
 

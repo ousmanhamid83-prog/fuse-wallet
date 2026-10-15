@@ -278,6 +278,46 @@ n'est pas archivé. Ajoute une règle locale sur le **manager**
 Valide avec `wazuh-logtest` (colle une ligne de `honeypot.log`). Pour tout
 conserver même sans alerte, active `<logall_json>yes</logall_json>`.
 
+### Étape 7 — Mode purple : valider que la détection se déclenche
+
+Le mode purple rejoue des sondes **inertes et marquées** (un canari unique par
+sonde) contre **ton propre honeypot** ou une pré-prod sous mandat, puis vérifie
+qu'elles sont bien capturées. Ce n'est pas une attaque : aucune n'exploite quoi
+que ce soit, la cible est inerte/autorisée, et une cible externe non autorisée
+est refusée sans qu'aucune sonde ne parte.
+
+```bash
+cd tasko-defense
+# Contre ton honeypot local (boucle locale : autorisé sans mandat)
+python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
+    --honeypot-log /var/log/tasko-honeypot/honeypot.log --ssh --ssh-port 2222 \
+    --journal journal-tests.jsonl --sortie rapport-purple.md
+
+# Contre une pré-prod d'un client : exige un mandat autorisant validation_detection
+python3 -m tasko.cli purple --cible https://preprod.client.cm/ \
+    --mandat mandats/client.mandat.yaml --ip-source 198.51.100.10
+```
+
+Chaque sonde marquée **DÉTECTÉ** doit déclencher une règle Wazuh ; une sonde
+**NON DÉTECTÉ** révèle un trou de détection (règle manquante, log non ingéré) à
+corriger. C'est la boucle purple : attaque simulée inerte → vérification bleue.
+
+### Exploitation contrôlée (Annexe D) — documenter, jamais automatiser
+
+Tasko n'exécute jamais l'exploitation. Quand l'Annexe D est signée et que le
+mandat autorise le type `exploitation`, l'opérateur réalise la PoC **à la main**
+(dans le périmètre, sans extraire de données, sans persistance), puis la **scelle** :
+
+```bash
+python3 -m tasko.cli poc --mandat mandats/client.mandat.yaml \
+    --cible https://client.cm/login --titre "SQLi /login" --reference CVE-XXXX-YYYY \
+    --severite élevée --etapes "..." --resultat "exploitabilité démontrée, lecture seule" \
+    --preuve capture1.png --preuve trace.txt --journal journal-tests.jsonl --sortie poc-client
+```
+
+Le dossier produit horodate, hache chaque preuve (chaîne de possession) et
+rappelle les limites Annexe D. Sans Annexe D signée, la commande **refuse**.
+
 ---
 
 ## Cycle opérationnel type (résumé)

@@ -16,8 +16,16 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
 - **Générateur de rapport** `tasko/rapport.py` (Article 6) : agrège Nuclei, WPScan,
   ZAP et Nmap en findings normalisés, dédupliqués, triés par sévérité, avec CVE/CWE
   et recommandations, en rapport client Markdown. 14 tests unitaires.
+- **Documentation de PoC** `tasko/poc.py` (Annexe D) : scelle les preuves d'une PoC
+  réalisée à la main (SHA-256 par preuve + sceau global du dossier, rappel des limites
+  Annexe D). N'exécute AUCUNE exploitation ; refuse sans Annexe D signée. 29 assertions.
+- **Mode purple** `tasko/purple.py` (type `validation_detection`) : rejoue des sondes
+  INERTES et marquées d'un canari contre le honeypot/une pré-prod pour vérifier que la
+  détection se déclenche ; mesure DÉTECTÉ/NON DÉTECTÉ via le log honeypot et renvoie
+  vers Wazuh. Boucle locale autorisée sans mandat ; toute autre cible exige un mandat.
+  Garde de cohérence hôte autorisé == hôte contacté. Aucun exploit, pas de DoS.
 - **CLI étendu** : `verifier` (+ `--journal`), `info`, `nouveau-mandat`, `journaliser`,
-  `journal`, `rapport`.
+  `journal`, `rapport`, `poc`, `purple`.
 - Scans câblés : journalisation automatique (empreintes) + génération du rapport et
   de l'Annexe C en fin d'exécution.
 - `mandats/` : gabarits `exemple` et `tchadone` (non signés par défaut).

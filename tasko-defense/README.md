@@ -40,7 +40,22 @@ python3 -m tasko.cli journal --fichier rapports/<date>/journal-tests.jsonl -o an
 # Créer un nouveau mandat (non signé) depuis le gabarit
 python3 -m tasko.cli nouveau-mandat --reference TASKO-2026-client-001 \
     --domaine client.cm --sortie mandats/client.mandat.yaml
+
+# Documenter une PoC sous Annexe D (refuse sans Annexe D signée ; n'exécute RIEN)
+python3 -m tasko.cli poc --mandat mandats/client.mandat.yaml \
+    --cible https://client.cm/login --titre "SQLi /login" --reference CVE-... \
+    --etapes "..." --resultat "..." --preuve capture.png --sortie poc-client
+
+# Mode purple : rejouer des sondes INERTES contre TON honeypot et vérifier la détection
+python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
+    --honeypot-log /var/log/tasko-honeypot/honeypot.log
 ```
+
+Portée éthique : `poc` ne fait que **sceller** des preuves que l'opérateur a
+produites à la main (autorisé par l'Annexe D) — aucune exploitation automatisée.
+`purple` n'émet que des sondes **inertes et marquées** (canari) contre ton propre
+honeypot ou une pré-prod sous mandat `validation_detection` ; toute cible externe
+non autorisée est refusée sans qu'aucune sonde ne parte.
 
 Pour un nouveau site : copier `mandats/exemple.mandat.yaml`, remplir le périmètre,
 faire **signer** le mandat papier par le propriétaire, puis passer `signe: true`.
@@ -52,6 +67,8 @@ faire **signer** le mandat papier par le propriétaire, puis passer `signe: true
 | `tasko/mandat.py`, `tasko/cli.py` | Moteur de mandat + CLI (le verrou) |
 | `tasko/journal.py` | Journal des tests (Article 8 / Annexe C : preuve + empreintes) |
 | `tasko/rapport.py` | Générateur de rapport client (Article 6 : vulnérabilités + CVSS) |
+| `tasko/poc.py` | Documentation/scellement d'une PoC sous Annexe D (n'exécute rien) |
+| `tasko/purple.py` | Mode purple : sondes inertes pour valider la détection (honeypot/Wazuh) |
 | `mandats/` | Mandats lisibles par machine (gabarits non signés fournis) |
 | `mandat/mandat-audit-v2.md` | Mandat juridique (règles d'engagement) |
 | `outils/scan/scan-web.sh` | Audit web (Nuclei + WPScan), cadré par le mandat |
