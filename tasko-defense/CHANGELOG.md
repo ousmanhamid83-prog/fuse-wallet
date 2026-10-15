@@ -64,6 +64,10 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
     scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
     automatisé à l'échelle — jamais d'exploitation.
 
+- **Aperçu des interfaces** : `docs/apercu-interfaces.html` — captures RÉELLES du
+  terminal (aide, verrou, décodage de preuve, brouillon de PoC, rapport, purple,
+  audit de parc). Tasko est un outil en ligne de commande, sans interface graphique.
+
 ### Refusé par conception (hors périmètre, non négociable)
 - Pas de moteur d'exploitation automatisée NI semi-automatisée, pas de « red team
   engine », pas de cassage de hash/mot de passe, pas de déchiffrement de secret par
