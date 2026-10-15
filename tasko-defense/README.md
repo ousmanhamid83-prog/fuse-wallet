@@ -77,6 +77,11 @@ n'exécute rien. Tasko **n'automatise jamais** l'exploitation ni le cassage de s
 Pour un nouveau site : copier `mandats/exemple.mandat.yaml`, remplir le périmètre,
 faire **signer** le mandat papier par le propriétaire, puis passer `signe: true`.
 
+Pour auditer **tes propres machines** : voir `docs/auditer-ses-machines.md`
+(mandat d'auto-audit `mandats/auto-audit.mandat.yaml`, documentation de PoC
+Annexe D, et récupération de tes fichiers perdus). Tasko ne contient **aucun**
+moteur d'exploitation automatisé : l'exploitation reste manuelle et documentée.
+
 ## Composants
 
 | Chemin | Rôle |

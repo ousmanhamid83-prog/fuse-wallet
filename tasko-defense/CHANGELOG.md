@@ -52,10 +52,17 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   (+ `--valide-du/--valide-au`), `journaliser`, `journal`, `rapport`, `poc`
   (+ `--depuis-brouillon`), `poc-brouillon`, `purple`, `preuve`.
 
+- **Auto-audit** : `mandats/auto-audit.mandat.yaml` (tester ton propre parc) +
+  `docs/auditer-ses-machines.md` (runbook : audit de tes machines, PoC Annexe D,
+  récupération de tes fichiers perdus via sauvegardes/testdisk/photorec/ddrescue).
+
 ### Refusé par conception (hors périmètre, non négociable)
-- Pas de moteur d'exploitation automatisée, pas de « red team engine », pas de cassage
-  de hash/mot de passe, pas de déchiffrement de secret par clé non détenue.
-  L'exploitation reste un acte humain, autorisé (Annexe D) et documenté (`poc`).
+- Pas de moteur d'exploitation automatisée NI semi-automatisée, pas de « red team
+  engine », pas de cassage de hash/mot de passe, pas de déchiffrement de secret par
+  clé non détenue — quel que soit le motif (y compris « ses propres machines » ou
+  « récupérer ses fichiers »). L'exploitation reste un acte humain, autorisé
+  (Annexe D) et documenté (`poc`). La récupération de données se fait via des outils
+  dédiés (sauvegardes, récupération de système de fichiers), jamais par exploitation.
 - Scans câblés : journalisation automatique (empreintes) + génération du rapport et
   de l'Annexe C en fin d'exécution.
 - `mandats/` : gabarits `exemple` et `tchadone` (non signés par défaut).

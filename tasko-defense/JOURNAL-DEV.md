@@ -170,6 +170,22 @@ seulement s'il y a un mandat, en une commande (semi-auto) pour gagner du temps.
 - Tests : `test_threat_intel_preuve.py` couvre mandat signé/non signé/expiré.
   Suite complète : 7 fichiers, tous verts.
 
+## 2026-10-15 — 3 chantiers légitimes outillés ; refus définitif du moteur d'exploit
+
+Le commanditaire veut monter une start-up d'audit et redemande un moteur
+d'exploitation semi-automatisé. **Refus définitif et acté** (ce n'est plus
+rediscuté à chaque tour) : aucune arme d'exploitation, quel que soit le motif
+(« ses propres machines », « récupérer ses fichiers »). C'est ce qui rend une
+boîte d'audit licenciable — et c'est ce que dit son propre mandat (Art. 2.4 /
+Annexe D).
+
+Les trois chantiers **légitimes** demandés sont outillés, sans moteur offensif :
+- `mandats/auto-audit.mandat.yaml` : mandat pour tester SON propre parc.
+- `docs/auditer-ses-machines.md` : runbook couvrant (1) audit de ses machines avec
+  les outils existants sous mandat, (2) documentation de PoC manuelle (Annexe D via
+  poc/poc-brouillon), (3) récupération de ses fichiers perdus (sauvegardes,
+  testdisk/photorec, ddrescue, reset de compte) — pas d'exploitation.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

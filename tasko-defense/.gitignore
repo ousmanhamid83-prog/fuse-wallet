@@ -12,6 +12,7 @@ mandats/*.mandat.yaml
 !mandats/exemple.mandat.yaml
 !mandats/tchadone.mandat.yaml
 !mandats/honeypot-local.mandat.yaml
+!mandats/auto-audit.mandat.yaml
 *.pid
 *.service-test
 rapports/

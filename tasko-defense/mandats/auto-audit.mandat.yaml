@@ -1,0 +1,43 @@
+# Mandat d'AUTO-AUDIT — tester TES PROPRES machines (celles que tu possèdes).
+# Tu es à la fois Prestataire ET Client : tu peux signer ce mandat toi-même.
+# Passe `signe: true` une fois que tu assumes ce cadre pour TON parc.
+#
+# ⚠️ Ne mets dans `perimetre.ips` que des IP de machines que TU possèdes/contrôles.
+#    Jamais une IP tierce, jamais un hébergement mutualisé partagé.
+mandat:
+  reference: "TASKO-auto-audit"
+
+  signe: false          # passe à true pour autoriser l'audit de ton parc
+  signe_par: "[Ton nom — propriétaire des machines]"
+  signe_le: "[AAAA-MM-JJ]"
+
+  valide_du: "2020-01-01"
+  valide_au: "2099-12-31"
+  fuseau: "UTC"
+  fenetres: []          # pas de restriction horaire sur ton propre parc
+
+  ip_source: []         # (optionnel) IP fixe d'où tu lances l'audit
+
+  perimetre:
+    domaines: []
+    ips:                 # TES machines uniquement — remplace par tes vraies IP/plages
+      - "127.0.0.0/8"    # ta machine locale
+      # - "192.168.1.0/24"  # ton LAN privé (exemple)
+    heberge_dedie: true  # tes propres machines => dédiées
+
+  exclusions:
+    domaines: []
+    ips: []
+
+  # Exploitation : reste MANUELLE et documentée (tasko poc). Pour cocher
+  # 'exploitation', il faut aussi annexe_d_signee: true. Aucun moteur automatisé.
+  annexe_d_signee: false
+
+  tests_autorises:
+    decouverte: true            # cartographie / ports
+    scan_web: true              # Nuclei / WPScan / ZAP passif
+    scan_reseau: true           # Nmap vuln & safe (machines dédiées => ok)
+    test_authentifie: true      # ZAP authentifié avec un compte de test à toi
+    validation_detection: true  # mode purple : valider ta détection
+    exploitation: false         # exige annexe_d_signee: true ; PoC manuelle via `tasko poc`
+    ingenierie_sociale: false
