@@ -38,6 +38,35 @@ python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
 Les rapports (findings triés par sévérité) et l'Annexe C (journal des tests)
 sont produits automatiquement dans `outils/scan/rapports/<date>/`.
 
+### À l'échelle : un parc de milliers de machines
+
+Pas besoin de lister les IP une par une. Deux leviers :
+
+1. **Déclare ton parc par plages (CIDR) ou via un fichier d'inventaire** dans le
+   mandat — une seule fois :
+   ```yaml
+   perimetre:
+     ips: ["10.0.0.0/8", "192.168.0.0/16"]   # couvre des milliers de machines
+     ips_fichier: "inventaire-parc.txt"        # OU un fichier (une IP/plage/ligne, # commentaire)
+     heberge_dedie: true
+   ```
+2. **Audite tout le parc en un lot** avec `audit-parc.sh`. Chaque hôte de
+   l'inventaire est vérifié contre le mandat AVANT d'être scanné ; un hôte hors
+   mandat est **ignoré** (jamais scanné), le lot continue :
+   ```bash
+   cd outils/scan
+   export MANDAT=../../mandats/auto-audit.mandat.yaml
+   export AUDIT_IP=198.51.100.10          # (optionnel) ton IP source
+   export WPSCAN_API_TOKEN=xxxx           # pour un audit web
+   bash audit-parc.sh parc-hosts.txt reseau   # un hôte/IP par ligne
+   bash audit-parc.sh sites.txt web           # une URL par ligne
+   ```
+   Résultats agrégés + Annexe C dans `outils/scan/audits-parc/<date>/`, avec un
+   `resume.txt` (scannés / ignorés hors mandat / échecs).
+
+> C'est de l'audit automatisé **à l'échelle** : on scanne (on TROUVE) tout le parc
+> autorisé. L'exploitation, elle, reste manuelle et ciblée (Annexe D, §2).
+
 ---
 
 ## 2. Documenter une PoC d'exploitation (Annexe D) — manuelle

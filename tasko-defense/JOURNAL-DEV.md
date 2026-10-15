@@ -186,6 +186,24 @@ Les trois chantiers **légitimes** demandés sont outillés, sans moteur offensi
   poc/poc-brouillon), (3) récupération de ses fichiers perdus (sauvegardes,
   testdisk/photorec, ddrescue, reset de compte) — pas d'exploitation.
 
+## 2026-10-15 — Audit de parc à l'échelle (milliers de machines)
+
+Le commanditaire gère des milliers d'ordis : impossible de lister les IP une par
+une, d'où un besoin d'automatisation. Réponse DÉFENSIVE (audit, pas « attaque ») :
+
+- Moteur de mandat : `perimetre.ips_fichier` / `domaines_fichier` chargent un
+  fichier d'inventaire (une entrée/ligne, # commentaire) ; combiné aux CIDR, un
+  parc entier se déclare en quelques lignes. Helper `_charger_liste`. Test ajouté
+  (plages du fichier dans le périmètre, appartenance in/out).
+- `outils/scan/audit-parc.sh` : lance les scans sur tout un inventaire d'hôtes ;
+  CHAQUE hôte passe le garde de mandat avant scan (hors mandat → ignoré, jamais
+  scanné) ; pause entre hôtes ; rapports agrégés + Annexe C ; resume.txt. Testé
+  avec stubs : hôte du périmètre scanné, hôte hors périmètre ignoré (0 contact).
+
+Rappel (acté) : l'automatisation couvre la DÉCOUVERTE à l'échelle. L'exploitation
+reste manuelle, ciblée, autorisée (Annexe D). Aucun moteur d'exploit. Suite : 7
+fichiers de tests, tous verts.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

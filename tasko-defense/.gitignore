@@ -1,6 +1,7 @@
 # Sorties d'exécution — ne jamais committer (peuvent contenir des données client)
 outils/scan/rapports/
 outils/scan/rapports-reseau/
+outils/scan/audits-parc/
 outils/scan/sites.txt
 outils/**/preuves_*/
 outils/**/*.log

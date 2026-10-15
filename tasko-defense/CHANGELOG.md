@@ -55,6 +55,14 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
 - **Auto-audit** : `mandats/auto-audit.mandat.yaml` (tester ton propre parc) +
   `docs/auditer-ses-machines.md` (runbook : audit de tes machines, PoC Annexe D,
   récupération de tes fichiers perdus via sauvegardes/testdisk/photorec/ddrescue).
+- **Audit de parc à l'échelle** (milliers de machines, sans les lister une par une) :
+  - le mandat accepte un **fichier d'inventaire** (`perimetre.ips_fichier` /
+    `domaines_fichier`) et des **plages CIDR** ; des milliers d'actifs se déclarent
+    en quelques lignes.
+  - `outils/scan/audit-parc.sh` : lance les scans sur tout un inventaire ; CHAQUE
+    hôte est vérifié contre le mandat avant scan (hôte hors mandat = ignoré, jamais
+    scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
+    automatisé à l'échelle — jamais d'exploitation.
 
 ### Refusé par conception (hors périmètre, non négociable)
 - Pas de moteur d'exploitation automatisée NI semi-automatisée, pas de « red team

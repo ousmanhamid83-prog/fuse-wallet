@@ -21,6 +21,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as _dt
 import ipaddress
+import os
 import re
 from typing import Iterable
 from zoneinfo import ZoneInfo
@@ -155,9 +156,23 @@ class Mandat:
             problemes.append(str(e))
             fenetres = []
 
+        # Base pour résoudre un éventuel fichier d'inventaire (relatif au mandat).
+        base_dir = os.path.dirname(origine) if os.path.isfile(str(origine)) else "."
+
         perim = m.get("perimetre") or {}
         domaines = [_norm_domaine(d) for d in (perim.get("domaines") or [])]
         ips = _reseaux_valides(perim.get("ips"), souci, "perimetre.ips")
+        # Inventaire à l'échelle : des milliers de machines se déclarent via un
+        # fichier (une IP/plage/domaine par ligne, # pour commenter) plutôt qu'une
+        # par une dans le YAML.
+        if perim.get("ips_fichier"):
+            lignes = _charger_liste(os.path.join(base_dir, str(perim["ips_fichier"])),
+                                    souci, "perimetre.ips_fichier")
+            ips += _reseaux_valides(lignes, souci, "perimetre.ips_fichier")
+        if perim.get("domaines_fichier"):
+            lignes = _charger_liste(os.path.join(base_dir, str(perim["domaines_fichier"])),
+                                    souci, "perimetre.domaines_fichier")
+            domaines += [_norm_domaine(d) for d in lignes]
 
         excl = m.get("exclusions") or {}
         exclusions_domaines = [_norm_domaine(d) for d in (excl.get("domaines") or [])]
@@ -359,6 +374,25 @@ def _ip_dans(ip, plage: str) -> bool:
         hote = _comme_ip(plage)
         return hote is not None and hote == ip
     return ip in reseau
+
+
+def _charger_liste(chemin: str, souci, label: str) -> list[str]:
+    """Lit un fichier d'inventaire : une entrée par ligne, '#' pour commenter.
+
+    Permet de déclarer des milliers d'actifs sans les énumérer dans le YAML.
+    Un fichier introuvable est signalé via `souci` (fatal si mandat signé).
+    """
+    try:
+        with open(chemin, "r", encoding="utf-8") as f:
+            out = []
+            for ligne in f:
+                ligne = ligne.split("#", 1)[0].strip()
+                if ligne:
+                    out.append(ligne)
+            return out
+    except OSError as e:
+        souci(f"{label} : inventaire illisible : {chemin} ({e})")
+        return []
 
 
 def _reseaux_valides(valeurs, souci, label: str) -> list[str]:

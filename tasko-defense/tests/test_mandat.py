@@ -144,6 +144,27 @@ def run() -> int:
     d = autoriser(m4, "https://exemple.cm/", "scan_web", moment=minuit)
     ok &= check(d.autorise, "fenêtre franchissant minuit : 00:30 local autorisé")
 
+    # --- Inventaire à l'échelle : perimetre.ips_fichier (parc de milliers d'IP) ---
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="tasko-inv-")
+    with open(os.path.join(tmp, "parc.txt"), "w", encoding="utf-8") as f:
+        f.write("# parc interne\n10.0.0.0/8\n192.168.0.0/16\n")
+    with open(os.path.join(tmp, "m.yaml"), "w", encoding="utf-8") as f:
+        f.write('mandat:\n  reference: "T-INV"\n  signe: true\n'
+                '  valide_du: "2020-01-01"\n  valide_au: "2099-12-31"\n'
+                '  fuseau: "UTC"\n  fenetres: []\n  ip_source: []\n'
+                '  perimetre: {domaines: [], ips: ["127.0.0.0/8"], '
+                'ips_fichier: "parc.txt", heberge_dedie: true}\n'
+                '  exclusions: {domaines: [], ips: []}\n  annexe_d_signee: false\n'
+                '  tests_autorises: {scan_reseau: true}\n')
+    minv = Mandat.charger(os.path.join(tmp, "m.yaml"))
+    ok &= check("10.0.0.0/8" in minv.ips and "192.168.0.0/16" in minv.ips,
+                "inventaire : plages du fichier chargées dans le périmètre")
+    d = autoriser(minv, "10.1.2.3", "scan_reseau", moment=DANS)
+    ok &= check(d.autorise, "inventaire : IP du parc (10.1.2.3) autorisée")
+    d = autoriser(minv, "8.8.8.8", "scan_reseau", moment=DANS)
+    ok &= check(not d.autorise, "inventaire : IP hors parc (8.8.8.8) refusée")
+
     print("\nRÉSULTAT :", "TOUS LES TESTS PASSENT" if ok else "DES TESTS ÉCHOUENT")
     return 0 if ok else 1
 
