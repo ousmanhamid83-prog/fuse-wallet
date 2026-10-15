@@ -49,5 +49,6 @@ mandat:
     scan_web: true
     scan_reseau: false         # false tant que heberge_dedie n'est pas confirmé
     test_authentifie: false
+    validation_detection: false   # mode purple (sondes inertes de validation de détection)
     exploitation: false        # exige annexe_d_signee: true
     ingenierie_sociale: false

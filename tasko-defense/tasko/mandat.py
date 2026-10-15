@@ -29,11 +29,12 @@ import yaml
 
 # Types de tests reconnus et leur clé dans le mandat (section tests_autorises).
 TYPES_TEST = (
-    "decouverte",        # cartographie / scan de ports
-    "scan_web",          # Nuclei, WPScan, ZAP passif
-    "scan_reseau",       # Nmap (exige hébergement dédié)
-    "test_authentifie",  # ZAP authentifié via compte de test
-    "exploitation",      # pentest avec exploitation (exige Annexe D)
+    "decouverte",           # cartographie / scan de ports
+    "scan_web",             # Nuclei, WPScan, ZAP passif
+    "scan_reseau",          # Nmap (exige hébergement dédié)
+    "test_authentifie",     # ZAP authentifié via compte de test
+    "validation_detection", # mode purple : sondes inertes pour tester la détection
+    "exploitation",         # pentest avec exploitation (exige Annexe D)
     "ingenierie_sociale",
 )
 

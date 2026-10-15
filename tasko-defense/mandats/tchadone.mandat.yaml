@@ -39,5 +39,6 @@ mandat:
     scan_web: true
     scan_reseau: false         # interdit tant que heberge_dedie n'est pas true
     test_authentifie: false    # true si le Client fournit un compte de test
+    validation_detection: false   # mode purple (sondes inertes de validation de détection)
     exploitation: false
     ingenierie_sociale: false

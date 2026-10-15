@@ -38,6 +38,7 @@ def mandat_base(**over) -> Mandat:
             "scan_web": True,
             "scan_reseau": True,
             "test_authentifie": True,
+            "validation_detection": True,
             "exploitation": False,
             "ingenierie_sociale": False,
         },
@@ -105,6 +106,10 @@ def run() -> int:
     # --- IP source ---
     d = autoriser(m, "https://exemple.cm/", "scan_web", moment=DANS, ip_source="8.8.8.8")
     ok &= check(not d.autorise and "source" in d.raison, "IP source non déclarée refusée")
+
+    # --- validation_detection (mode purple) autorisée dans le périmètre ---
+    d = autoriser(m, "https://exemple.cm/", "validation_detection", moment=DANS, ip_source="198.51.100.10")
+    ok &= check(d.autorise, "validation_detection autorisée (purple)")
 
     # --- Périmètre IP + exclusion IP ---
     d = autoriser(m, "203.0.113.10", "scan_reseau", moment=DANS)
