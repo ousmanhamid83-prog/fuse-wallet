@@ -281,19 +281,21 @@ conserver même sans alerte, active `<logall_json>yes</logall_json>`.
 ### Étape 7 — Mode purple : valider que la détection se déclenche
 
 Le mode purple rejoue des sondes **inertes et marquées** (un canari unique par
-sonde) contre **ton propre honeypot** ou une pré-prod sous mandat, puis vérifie
-qu'elles sont bien capturées. Ce n'est pas une attaque : aucune n'exploite quoi
-que ce soit, la cible est inerte/autorisée, et une cible externe non autorisée
-est refusée sans qu'aucune sonde ne parte.
+sonde) contre **ton propre honeypot** ou une pré-prod, puis vérifie qu'elles sont
+bien capturées. Ce n'est pas une attaque : aucune n'exploite quoi que ce soit, la
+cible est inerte/autorisée. **Tout passe par un mandat** — y compris ton honeypot
+local (tu signes `mandats/honeypot-local.mandat.yaml`, dont tu es Prestataire ET
+Client). Sans mandat couvrant la cible : refus, zéro sonde.
 
 ```bash
 cd tasko-defense
-# Contre ton honeypot local (boucle locale : autorisé sans mandat)
+# Contre TON honeypot local : signe d'abord mandats/honeypot-local.mandat.yaml
 python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
+    --mandat mandats/honeypot-local.mandat.yaml \
     --honeypot-log /var/log/tasko-honeypot/honeypot.log --ssh --ssh-port 2222 \
     --journal journal-tests.jsonl --sortie rapport-purple.md
 
-# Contre une pré-prod d'un client : exige un mandat autorisant validation_detection
+# Contre une pré-prod d'un client : mandat autorisant validation_detection
 python3 -m tasko.cli purple --cible https://preprod.client.cm/ \
     --mandat mandats/client.mandat.yaml --ip-source 198.51.100.10
 ```
@@ -301,6 +303,18 @@ python3 -m tasko.cli purple --cible https://preprod.client.cm/ \
 Chaque sonde marquée **DÉTECTÉ** doit déclencher une règle Wazuh ; une sonde
 **NON DÉTECTÉ** révèle un trou de détection (règle manquante, log non ingéré) à
 corriger. C'est la boucle purple : attaque simulée inerte → vérification bleue.
+
+### Analyser une preuve trouvée (décodage défensif)
+
+Quand un payload obscurci apparaît dans un log ou un web shell, `preuve` déroule
+ses couches d'encodage (base64, hex, URL, gzip, `fromCharCode`, `\x/\u`…) pour en
+révéler le texte, identifie le *type* d'un hash (sans le casser) et extrait les
+IOC — sans rien exécuter, sans casser ni déchiffrer de secret :
+
+```bash
+python3 -m tasko.cli preuve --fichier /chemin/payload-trouve.txt --sortie analyse.md
+python3 -m tasko.cli preuve --texte 'PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOw=='
+```
 
 ### Exploitation contrôlée (Annexe D) — documenter, jamais automatiser
 

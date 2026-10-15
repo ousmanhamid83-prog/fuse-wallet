@@ -119,6 +119,24 @@ le **clérical**, jamais l'acte offensif.
 > humaine, autorisée, documentée. Aucun moteur d'exploitation, aucun cassage de
 > secret n'a été ajouté.
 
+## 2026-10-15 — Réintégration (annulation précédente = erreur de saisie)
+
+L'annulation d'un tour précédent était une erreur de saisie de l'utilisateur.
+Réintégration, par-dessus le travail ajouté depuis (`poc-brouillon`), sans rien
+casser, des 3 éléments **défensifs** :
+
+- `tasko/preuve.py` + `tests/test_preuve.py` : analyseur de décodage/désobfuscation
+  d'un artefact détenu (aucun cassage, aucun réseau). Sous-commande `preuve`.
+- `mandats/honeypot-local.mandat.yaml` : mandat de l'opérateur pour sa propre infra.
+- `tasko/purple.py` + `tests/test_purple.py` en version **durcie** : plus d'exception
+  « boucle locale » — TOUTE cible exige un mandat `validation_detection`. CLI :
+  `--mandat` obligatoire pour `purple`.
+
+Fusion ciblée de `cli.py` (ajout de l'import + `_cmd_preuve` + sous-commande
+`preuve` + `purple --mandat` requis) en conservant `poc-brouillon`. Suite complète :
+6 fichiers de tests, tous verts. Rien d'offensif ajouté ; le refus du moteur
+d'exploitation/red-team reste entier.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

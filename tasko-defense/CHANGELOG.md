@@ -29,10 +29,22 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
 - **Mode purple** `tasko/purple.py` (type `validation_detection`) : rejoue des sondes
   INERTES et marquées d'un canari contre le honeypot/une pré-prod pour vérifier que la
   détection se déclenche ; mesure DÉTECTÉ/NON DÉTECTÉ via le log honeypot et renvoie
-  vers Wazuh. Boucle locale autorisée sans mandat ; toute autre cible exige un mandat.
-  Garde de cohérence hôte autorisé == hôte contacté. Aucun exploit, pas de DoS.
-- **CLI étendu** : `verifier` (+ `--journal`), `info`, `nouveau-mandat`, `journaliser`,
-  `journal`, `rapport`, `poc`, `purple`.
+  vers Wazuh. **Mandat exigé pour TOUTE cible** (honeypot local inclus ; gabarit
+  `mandats/honeypot-local.mandat.yaml`). Garde de cohérence hôte autorisé == hôte
+  contacté. Aucun exploit, pas de DoS.
+- **Analyseur de preuves** `tasko/preuve.py` : décode/désobfusque un artefact détenu
+  (base64/base64url, hex, URL, entités HTML, gzip/zlib, String.fromCharCode, \x/\u,
+  rot13), identifie le *type* des hashs (MD5/SHA/bcrypt/JWT, SANS cassage), extrait les
+  IOC, résume le comportement apparent. Hors ligne, n'exécute rien, ne casse/déchiffre
+  aucun secret. 9 assertions.
+- **CLI étendu** : `verifier` (+ `--journal`), `info`, `nouveau-mandat`
+  (+ `--valide-du/--valide-au`), `journaliser`, `journal`, `rapport`, `poc`
+  (+ `--depuis-brouillon`), `poc-brouillon`, `purple`, `preuve`.
+
+### Refusé par conception (hors périmètre, non négociable)
+- Pas de moteur d'exploitation automatisée, pas de « red team engine », pas de cassage
+  de hash/mot de passe, pas de déchiffrement de secret par clé non détenue.
+  L'exploitation reste un acte humain, autorisé (Annexe D) et documenté (`poc`).
 - Scans câblés : journalisation automatique (empreintes) + génération du rapport et
   de l'Annexe C en fin d'exécution.
 - `mandats/` : gabarits `exemple` et `tchadone` (non signés par défaut).
