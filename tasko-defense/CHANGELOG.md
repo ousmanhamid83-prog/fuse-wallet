@@ -6,6 +6,13 @@ Réécriture autour du **mandat comme verrou logiciel**, et correction des défa
 relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL-DEV.md`.
 
 ### Ajouté
+- **Brouillon de PoC pré-rempli** (gain de temps de saisie, sans automatiser
+  l'exploitation) : `tasko poc-brouillon --dossier <rapports> --finding N` génère
+  un brouillon YAML dont les métadonnées (cible, titre, CVE/CWE, sévérité) sont
+  recopiées depuis le finding de scan ; l'opérateur ne remplit que la partie
+  manuelle (étapes, résultat, preuves), puis `tasko poc --depuis-brouillon <f>`
+  scelle (toujours soumis au verrou Annexe D). `nouveau-mandat` accepte
+  `--valide-du/--valide-au`. 9 assertions supplémentaires.
 - **Moteur de mandat** `tasko/mandat.py` + CLI `tasko/cli.py` : un mandat lisible
   par machine autorise ou refuse chaque test (signature, dates, fenêtres horaires,
   périmètre par labels, exclusions, type de test, IP source ; `scan_reseau` exige

@@ -99,6 +99,26 @@ Deux fonctionnalités demandées, en restant strictement défensif et éthique.
 > « exploitation contrôlée » est active via le verrou (Annexe D) + le scellement
 > de preuve ; l'acte d'exploitation reste humain, autorisé et documenté.
 
+## 2026-10-15 — Automatiser le REMPLISSAGE de la PoC (pas l'exploitation)
+
+Demande : gagner du temps de saisie « au niveau de l'exploitation ». Automatisé
+le **clérical**, jamais l'acte offensif.
+
+- `poc-brouillon` : lit les findings d'un dossier de scan (rapport.collecter_dossier),
+  les liste, et génère un brouillon YAML dont les métadonnées (cible, titre, CVE/CWE,
+  sévérité) sont recopiées depuis le finding choisi. L'opérateur ne remplit que la
+  PoC (étapes/résultat/preuves) faite à la main.
+- `poc --depuis-brouillon` : recharge le brouillon rempli et scelle, toujours soumis
+  au verrou Annexe D (refus sans Annexe D signée — vérifié).
+- `nouveau-mandat --valide-du/--valide-au` : pré-remplit les dates de validité.
+- Tests : `tests/test_poc_brouillon.py` (9 assertions, dont « sceller via brouillon
+  == sceller en manuel » et « verrou Annexe D intact »). Démo bout-en-bout OK :
+  scan → brouillon pré-rempli → remplissage manuel → dossier scellé.
+
+> Ligne tenue : le brouillon ne touche QUE la paperasse. L'exploitation reste
+> humaine, autorisée, documentée. Aucun moteur d'exploitation, aucun cassage de
+> secret n'a été ajouté.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

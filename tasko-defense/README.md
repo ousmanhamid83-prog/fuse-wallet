@@ -37,11 +37,20 @@ python3 -m tasko.cli rapport --dossier rapports/<date> --mandat mandats/x.yaml -
 # Journal des tests → Annexe C (preuve du caractère autorisé, Article 8)
 python3 -m tasko.cli journal --fichier rapports/<date>/journal-tests.jsonl -o annexe-C.md
 
-# Créer un nouveau mandat (non signé) depuis le gabarit
+# Créer un nouveau mandat (non signé), avec des champs déjà remplis
 python3 -m tasko.cli nouveau-mandat --reference TASKO-2026-client-001 \
-    --domaine client.cm --sortie mandats/client.mandat.yaml
+    --domaine client.cm --valide-du 2026-11-01 --valide-au 2026-11-30 \
+    --sortie mandats/client.mandat.yaml
 
-# Documenter une PoC sous Annexe D (refuse sans Annexe D signée ; n'exécute RIEN)
+# Gain de temps : pré-remplir un brouillon de PoC depuis un finding de scan
+python3 -m tasko.cli poc-brouillon --dossier rapports/<date>            # liste les findings
+python3 -m tasko.cli poc-brouillon --dossier rapports/<date> --finding 1 \
+    --sortie brouillon.yaml      # cible/titre/CVE/sévérité déjà remplis ; tu ajoutes la PoC
+# Puis sceller le brouillon rempli (refuse sans Annexe D signée ; n'exécute RIEN)
+python3 -m tasko.cli poc --depuis-brouillon brouillon.yaml \
+    --mandat mandats/client.mandat.yaml --sortie poc-client
+
+# (ou saisie directe)
 python3 -m tasko.cli poc --mandat mandats/client.mandat.yaml \
     --cible https://client.cm/login --titre "SQLi /login" --reference CVE-... \
     --etapes "..." --resultat "..." --preuve capture.png --sortie poc-client

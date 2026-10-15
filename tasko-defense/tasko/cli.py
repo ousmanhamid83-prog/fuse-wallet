@@ -89,6 +89,10 @@ def _cmd_nouveau_mandat(args: argparse.Namespace) -> int:
     contenu = contenu.replace("TASKO-2026-exemple-001", args.reference)
     if args.domaine:
         contenu = contenu.replace('- "exemple.cm"', f'- "{args.domaine}"')
+    if args.valide_du:
+        contenu = contenu.replace('valide_du: "2026-01-01"', f'valide_du: "{args.valide_du}"')
+    if args.valide_au:
+        contenu = contenu.replace('valide_au: "2026-12-31"', f'valide_au: "{args.valide_au}"')
     os.makedirs(os.path.dirname(os.path.abspath(args.sortie)) or ".", exist_ok=True)
     with open(args.sortie, "w", encoding="utf-8") as f:
         f.write(contenu)
@@ -157,11 +161,34 @@ def _cmd_poc(args: argparse.Namespace) -> int:
     except MandatError as e:
         print(f"ERREUR mandat : {e}", file=sys.stderr)
         return CODE_ERREUR
-    finding = {"cible": args.cible, "titre": args.titre,
-               "reference": args.reference or "", "severite": args.severite or ""}
+
+    if args.depuis_brouillon:
+        try:
+            br = _poc.charger_brouillon(args.depuis_brouillon)
+        except (OSError, ValueError) as e:
+            print(f"ERREUR brouillon : {e}", file=sys.stderr)
+            return CODE_ERREUR
+        finding = br["finding"]
+        etapes, resultat = br["etapes"], br["resultat"]
+        preuves = br["preuves"]
+        operateur = args.operateur or br["operateur"]
+    else:
+        manquants = [n for n, v in (("--cible", args.cible), ("--titre", args.titre),
+                                    ("--etapes", args.etapes), ("--resultat", args.resultat))
+                     if not v]
+        if manquants:
+            print("ERREUR : champ(s) requis manquant(s) (ou utilise --depuis-brouillon) : "
+                  + ", ".join(manquants), file=sys.stderr)
+            return CODE_ERREUR
+        finding = {"cible": args.cible, "titre": args.titre,
+                   "reference": args.reference or "", "severite": args.severite or ""}
+        etapes, resultat = args.etapes, args.resultat
+        preuves = args.preuve or []
+        operateur = args.operateur
+
     dossier = _poc.documenter(
-        mandat, finding, args.preuve or [], args.etapes, args.resultat,
-        operateur=args.operateur, ip_source=args.ip_source, journal=args.journal)
+        mandat, finding, preuves, etapes, resultat,
+        operateur=operateur, ip_source=args.ip_source, journal=args.journal)
     if not dossier.get("autorise"):
         print(f"[REFUSÉ] {dossier.get('refus', 'non autorisé')}", file=sys.stderr)
         print(">>> Aucune PoC scellée. L'exploitation exige un mandat couvrant la cible "
@@ -172,6 +199,42 @@ def _cmd_poc(args: argparse.Namespace) -> int:
         print(f"PoC documentée et scellée : {cj} / {cm}")
     else:
         sys.stdout.write(_poc.rendre_markdown(dossier))
+    return CODE_OK
+
+
+def _cmd_poc_brouillon(args: argparse.Namespace) -> int:
+    if not args.dossier:
+        sortie_texte = _poc.modele_brouillon(None)   # gabarit vierge
+    else:
+        if not os.path.isdir(args.dossier):
+            print(f"ERREUR : dossier introuvable : {args.dossier}", file=sys.stderr)
+            return CODE_ERREUR
+        findings = _rapport.trier(_rapport.collecter_dossier(args.dossier))
+        if not findings:
+            print("Aucun finding exploitable dans ce dossier.", file=sys.stderr)
+            return CODE_ERREUR
+        if args.finding is None:
+            print(f"{len(findings)} finding(s) — relance avec --finding <N> pour pré-remplir :")
+            for i, f in enumerate(findings, 1):
+                ref = f" [{f.reference}]" if f.reference else ""
+                print(f"  {i}. [{f.severite}] {f.titre} — {f.cible}{ref}")
+            return CODE_OK
+        if args.finding < 1 or args.finding > len(findings):
+            print(f"ERREUR : --finding doit être entre 1 et {len(findings)}", file=sys.stderr)
+            return CODE_ERREUR
+        f = findings[args.finding - 1]
+        sortie_texte = _poc.modele_brouillon({
+            "cible": f.cible, "titre": f.titre,
+            "reference": f.reference, "severite": f.severite})
+
+    if args.sortie:
+        with open(args.sortie, "w", encoding="utf-8") as fh:
+            fh.write(sortie_texte)
+        print(f"Brouillon écrit : {args.sortie}")
+        print("Remplis les champs « À REMPLIR », puis scelle :")
+        print(f"  tasko poc --depuis-brouillon {args.sortie} --mandat <mandat signé>")
+    else:
+        sys.stdout.write(sortie_texte)
     return CODE_OK
 
 
@@ -226,6 +289,8 @@ def construire_parseur() -> argparse.ArgumentParser:
     nm.add_argument("--reference", required=True, help="référence du mandat, ex. TASKO-2026-client-001")
     nm.add_argument("--sortie", required=True, help="chemin du fichier .mandat.yaml à créer")
     nm.add_argument("--domaine", default=None, help="domaine principal du périmètre")
+    nm.add_argument("--valide-du", default=None, help="date de début de validité (AAAA-MM-JJ)")
+    nm.add_argument("--valide-au", default=None, help="date de fin de validité (AAAA-MM-JJ)")
     nm.add_argument("--force", action="store_true", help="écrase un fichier existant")
     nm.set_defaults(func=_cmd_nouveau_mandat)
 
@@ -256,18 +321,28 @@ def construire_parseur() -> argparse.ArgumentParser:
 
     pc = sous.add_parser("poc", help="documente et scelle une PoC sous Annexe D (n'exécute rien)")
     pc.add_argument("--mandat", required=True)
-    pc.add_argument("--cible", required=True)
-    pc.add_argument("--titre", required=True, help="intitulé du finding / de la faille")
+    pc.add_argument("--depuis-brouillon", default=None,
+                    help="brouillon YAML rempli (voir 'poc-brouillon') : remplit tout sauf le mandat")
+    pc.add_argument("--cible", default=None)
+    pc.add_argument("--titre", default=None, help="intitulé du finding / de la faille")
     pc.add_argument("--reference", default=None, help="CVE/CWE/ref template")
     pc.add_argument("--severite", default=None)
-    pc.add_argument("--etapes", required=True, help="étapes de la PoC réalisées à la main")
-    pc.add_argument("--resultat", required=True, help="observation / preuve d'exploitabilité")
+    pc.add_argument("--etapes", default=None, help="étapes de la PoC réalisées à la main")
+    pc.add_argument("--resultat", default=None, help="observation / preuve d'exploitabilité")
     pc.add_argument("--preuve", action="append", help="fichier de preuve (répétable)")
     pc.add_argument("--operateur", default=None)
     pc.add_argument("--ip-source", default=None)
     pc.add_argument("--journal", default=None)
     pc.add_argument("--sortie", default=None, help="base du chemin (.json/.md seront créés)")
     pc.set_defaults(func=_cmd_poc)
+
+    pb = sous.add_parser("poc-brouillon",
+                         help="génère un brouillon de PoC pré-rempli depuis un finding de scan")
+    pb.add_argument("--dossier", default=None, help="dossier de rapports (nuclei/wpscan/zap/nmap)")
+    pb.add_argument("--finding", type=int, default=None,
+                    help="n° du finding (1-based) ; sans lui, liste les findings")
+    pb.add_argument("--sortie", default=None, help="fichier brouillon .yaml (sinon stdout)")
+    pb.set_defaults(func=_cmd_poc_brouillon)
 
     pu = sous.add_parser("purple", help="rejoue des sondes inertes pour valider la détection")
     pu.add_argument("--cible", required=True, help="URL du honeypot/pré-prod (http://127.0.0.1:8080/)")

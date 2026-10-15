@@ -318,6 +318,23 @@ python3 -m tasko.cli poc --mandat mandats/client.mandat.yaml \
 Le dossier produit horodate, hache chaque preuve (chaîne de possession) et
 rappelle les limites Annexe D. Sans Annexe D signée, la commande **refuse**.
 
+**Gagner du temps de saisie** (sans automatiser l'exploitation) : pré-remplis un
+brouillon depuis un finding de scan — la cible, le titre, la CVE et la sévérité
+sont recopiés automatiquement ; tu ne saisis que la PoC (étapes, résultat, preuves) :
+
+```bash
+python3 -m tasko.cli poc-brouillon --dossier rapports/<date>              # liste les findings
+python3 -m tasko.cli poc-brouillon --dossier rapports/<date> --finding 1 \
+    --sortie brouillon.yaml
+#   ... tu remplis les champs « À REMPLIR » du brouillon (la PoC faite à la main) ...
+python3 -m tasko.cli poc --depuis-brouillon brouillon.yaml \
+    --mandat mandats/client.mandat.yaml --journal journal-tests.jsonl --sortie poc-client
+```
+
+Le brouillon ne pré-remplit que la **paperasse** ; l'acte d'exploitation reste
+manuel, autorisé (Annexe D) et de ta responsabilité. Le scellement passe toujours
+par le verrou (refus sans Annexe D signée).
+
 ---
 
 ## Cycle opérationnel type (résumé)

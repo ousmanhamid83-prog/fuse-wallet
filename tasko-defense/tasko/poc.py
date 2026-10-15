@@ -297,3 +297,80 @@ def ecrire(dossier: dict, chemin_json: str, chemin_md: str) -> tuple[str, str]:
         with open(chemin, "w", encoding="utf-8") as fh:
             fh.write(contenu)
     return chemin_json, chemin_md
+
+
+# ---------------------------------------------------------------------------
+# Brouillon pré-rempli — gain de temps de SAISIE (pas d'exploitation ici).
+# Les métadonnées du finding (cible, titre, CVE, sévérité) sont recopiées
+# automatiquement ; l'opérateur ne remplit QUE la partie manuelle (étapes,
+# résultat, preuves). Le scellement reste soumis au verrou Annexe D.
+# ---------------------------------------------------------------------------
+def modele_brouillon(finding: dict | None = None) -> str:
+    """Rend un brouillon YAML de PoC, métadonnées pré-remplies depuis un finding.
+
+    ``finding`` : dict {cible, titre, reference, severite} (p.ex. issu d'un scan).
+    Si ``None``, rend un gabarit vierge. Les champs « À REMPLIR » sont la PoC
+    elle-même, que l'opérateur réalise et décrit à la main.
+    """
+    f = finding or {}
+
+    def q(v):  # échappe pour une valeur YAML entre guillemets doubles
+        return str(v or "").replace("\\", "\\\\").replace('"', '\\"')
+
+    return (
+        "# Brouillon de PoC (Annexe D) — métadonnées PRÉ-REMPLIES depuis le finding.\n"
+        "# Ne remplis QUE les champs marqués « À REMPLIR » (la PoC, faite à la main),\n"
+        "# puis scelle :  tasko poc --depuis-brouillon <ce fichier> --mandat <mandat signé>\n"
+        "poc:\n"
+        '  reference_mandat: ""          # (optionnel) référence du mandat qui autorise\n'
+        f'  cible: "{q(f.get("cible"))}"\n'
+        f'  titre: "{q(f.get("titre"))}"\n'
+        f'  reference: "{q(f.get("reference"))}"\n'
+        f'  severite: "{q(f.get("severite"))}"\n'
+        '  operateur: ""                 # ton nom\n'
+        "  # --- À REMPLIR À LA MAIN (la PoC elle-même) ---\n"
+        "  etapes: |\n"
+        "    (décris ici, étape par étape, la PoC que TU as réalisée à la main)\n"
+        "  resultat: |\n"
+        "    (observation : en quoi la faille est démontrée — en lecture seule)\n"
+        "  preuves:\n"
+        "    - (chemin d'une capture d'écran ou d'une trace requête/réponse)\n"
+    )
+
+
+def charger_brouillon(chemin: str) -> dict:
+    """Charge un brouillon YAML rempli. Renvoie {finding, etapes, resultat, preuves, operateur}.
+
+    Les lignes de preuve laissées sur le gabarit (entre parenthèses) sont ignorées.
+    """
+    import yaml  # dépendance déjà requise par le moteur de mandat
+
+    with open(chemin, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    p = data.get("poc", data) if isinstance(data, dict) else {}
+    if not isinstance(p, dict):
+        raise ValueError(f"{chemin} : brouillon illisible (clé 'poc' attendue)")
+
+    def propre(v):
+        s = str(v or "").strip()
+        # ignore les placeholders du gabarit (texte entre parenthèses)
+        return "" if (s.startswith("(") and s.endswith(")")) else s
+
+    preuves = []
+    for item in (p.get("preuves") or []):
+        s = propre(item)
+        if s:
+            preuves.append(s)
+    return {
+        "finding": {
+            "cible": propre(p.get("cible")),
+            "titre": propre(p.get("titre")),
+            "reference": propre(p.get("reference")),
+            "severite": propre(p.get("severite")),
+        },
+        "reference_mandat": propre(p.get("reference_mandat")),
+        "operateur": propre(p.get("operateur")) or None,
+        "etapes": propre(p.get("etapes")),
+        "resultat": propre(p.get("resultat")),
+        "preuves": preuves,
+    }
