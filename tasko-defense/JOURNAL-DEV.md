@@ -153,6 +153,23 @@ défensif.
 - `threat-intel` 2.1.0. Test `tests/test_threat_intel_preuve.py` (chaîne complète
   analyze_log → décodage). Suite complète : 7 fichiers, tous verts.
 
+## 2026-10-15 — threat-intel : « en ligne sous mandat » + exécution semi-auto
+
+Précision du commanditaire : décodage local toujours, mais enrichissement EN LIGNE
+seulement s'il y a un mandat, en une commande (semi-auto) pour gagner du temps.
+
+- `mandat_actif(path)` : autorise l'enrichissement réputation uniquement si le
+  mandat est SIGNÉ et dans sa période de validité. Sinon refus (reste local).
+- `--mandat` : sans lui (même avec une clé AbuseIPDB), aucune requête réseau —
+  analyse 100 % locale. Avec lui + clé : enrichissement réputation (base PUBLIQUE,
+  jamais la machine de l'attaquant). `report["enrichissement"]` trace la décision.
+- `--journal` : consigne l'analyse (Annexe C) et scelle l'empreinte du dossier.
+- Rappel : le décodage des payloads reste local et n'exécute RIEN. « Semi-auto » =
+  une commande enchaîne décodage local + enrichissement en ligne (sous mandat) ;
+  ce n'est PAS de l'exécution d'exploit.
+- Tests : `test_threat_intel_preuve.py` couvre mandat signé/non signé/expiré.
+  Suite complète : 7 fichiers, tous verts.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

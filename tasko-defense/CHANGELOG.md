@@ -37,6 +37,12 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   embarqués, gzip, fromCharCode…) et ajoutés au dossier sous `preuves_decodees`
   (couches, comportement apparent, IOC révélés). Local, hors ligne, n'exécute rien.
   `threat-intel` 2.1.0. Test d'intégration `tests/test_threat_intel_preuve.py`.
+- **Verrou « en ligne sous mandat » dans `threat-intel`** : le décodage reste 100 %
+  local ; l'enrichissement RÉPUTATION (AbuseIPDB, base publique — jamais la machine
+  de l'attaquant) n'est activé qu'avec `--mandat <signé et valide>`. Sans mandat, même
+  avec une clé, l'outil reste hors ligne (aucune requête). `--journal` consigne
+  l'analyse (Annexe C) et scelle l'empreinte du dossier. Exécution « semi-auto » :
+  une commande = décodage local + enrichissement en ligne si mandat.
 - **Analyseur de preuves** `tasko/preuve.py` : décode/désobfusque un artefact détenu
   (base64/base64url, hex, URL, entités HTML, gzip/zlib, String.fromCharCode, \x/\u,
   rot13), identifie le *type* des hashs (MD5/SHA/bcrypt/JWT, SANS cassage), extrait les

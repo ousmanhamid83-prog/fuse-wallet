@@ -189,14 +189,21 @@ sudo systemctl daemon-reload && sudo systemctl enable --now honeypot
 
 ### Étape 4 — Renseignement sur les menaces
 
+Le **décodage** des payloads est toujours **local**. L'enrichissement **en ligne**
+(réputation AbuseIPDB — base publique, jamais la machine de l'attaquant) n'est
+activé qu'avec un **mandat signé** : `--mandat`. Sans mandat, même avec une clé,
+l'analyse reste hors ligne. Une seule commande fait le tout (semi-automatique).
+
 ```bash
 cd tasko-defense/outils
-# La clé AbuseIPDB est FACULTATIVE : sans elle, l'analyse tourne hors ligne
-# (requests n'est importé que si la clé est définie).
-export ABUSEIPDB_KEY="ta_cle_gratuite"   # abuseipdb.com, 1000 req/jour
+export ABUSEIPDB_KEY="ta_cle_gratuite"   # abuseipdb.com, 1000 req/jour (facultatif)
 
-# Analyser les logs d'un site attaqué (l'IP cliente est lue dans le bon champ)
+# Analyse LOCALE seule (décodage des payloads, aucun réseau) :
 python3 threat-intel.py /var/log/nginx/access.log --type web
+
+# Analyse + enrichissement EN LIGNE (sous mandat) + journal Annexe C :
+python3 threat-intel.py /var/log/nginx/access.log --type web \
+    --mandat ../mandats/client.mandat.yaml --journal journal-tests.jsonl
 
 # Tentatives SSH
 python3 threat-intel.py /var/log/auth.log --type auth

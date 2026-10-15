@@ -81,6 +81,32 @@ def run() -> int:
     ok &= check(len(dec4) >= 1 and any("union select" in e["revele"].lower() for e in dec4),
                 "chaîne analyze_log -> décodage du payload de l'IP suspecte")
 
+    # 5) Verrou « en ligne sous mandat » : mandat_actif (aucun réseau).
+    def mandat(nom, signe, du, au):
+        p = os.path.join(tmp, nom)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(f'''mandat:
+  reference: "T-TI"
+  signe: {str(signe).lower()}
+  valide_du: "{du}"
+  valide_au: "{au}"
+  fuseau: "UTC"
+  fenetres: []
+  ip_source: []
+  perimetre: {{domaines: ["x.cm"], ips: [], heberge_dedie: false}}
+  exclusions: {{domaines: [], ips: []}}
+  annexe_d_signee: false
+  tests_autorises: {{}}
+''')
+        return p
+
+    ok &= check(ti.mandat_actif(mandat("ok.yaml", True, "2020-01-01", "2099-12-31"))[0] is True,
+                "en ligne : mandat signé et valide => autorisé")
+    ok &= check(ti.mandat_actif(mandat("ns.yaml", False, "2020-01-01", "2099-12-31"))[0] is False,
+                "en ligne : mandat non signé => refusé (reste local)")
+    ok &= check(ti.mandat_actif(mandat("exp.yaml", True, "2020-01-01", "2020-12-31"))[0] is False,
+                "en ligne : mandat expiré => refusé (reste local)")
+
     print("\nRÉSULTAT :", "TOUS LES TESTS PASSENT" if ok else "DES TESTS ÉCHOUENT")
     return 0 if ok else 1
 

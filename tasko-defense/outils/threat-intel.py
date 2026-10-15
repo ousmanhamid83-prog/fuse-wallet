@@ -24,20 +24,27 @@ Le résultat est un dossier exploitable par les autorités pour l'attribution.
       real_ip_header   CF-Connecting-IP;        # ou X-Forwarded-For
   sans cela, le premier champ reste l'IP du proxy, pas celle de l'attaquant.
 
+Local vs en ligne :
+  - Le DÉCODAGE des payloads (preuve) est TOUJOURS local : aucun réseau.
+  - L'enrichissement RÉPUTATION (AbuseIPDB, base PUBLIQUE ; jamais la machine de
+    l'attaquant) n'est activé que si `--mandat <mandat signé et valide>` est fourni
+    ET qu'une clé est présente. Sans mandat : analyse 100 % locale. C'est
+    l'exécution « semi-automatique » : une commande décode en local et, sous
+    mandat, enrichit en ligne.
+
 Prérequis :
-  - `requests` est FACULTATIF : il n'est importé que si ABUSEIPDB_KEY est défini.
-    Sans clé, l'outil tourne 100 % hors-ligne (aucun import, aucune erreur).
+  - `requests` est FACULTATIF : il n'est importé que si ABUSEIPDB_KEY est défini
+    ET qu'un mandat autorise l'enrichissement. Sinon, 100 % hors-ligne.
   - Ubuntu 24.04 (pip bloqué par PEP 668) :  sudo apt install python3-requests
-    (ou, dans un venv dédié : pip install requests)
   - Clé AbuseIPDB gratuite : https://www.abuseipdb.com (1000 requêtes/jour)
       export ABUSEIPDB_KEY="ta_cle"
 
 Usage :
-  python3 threat-intel.py /var/log/nginx/access.log
+  python3 threat-intel.py /var/log/nginx/access.log                 # local seul
   python3 threat-intel.py /var/log/auth.log --type auth
-  python3 threat-intel.py /var/log/nginx/access.log.3.gz
+  # Enrichissement en ligne (sous mandat) + journalisation Annexe C :
   python3 threat-intel.py honeypot.log --type honeypot --exclude admins.txt \
-          --mandat-ref TASKO-2026-xxx-001
+          --mandat ../mandats/client.mandat.yaml --journal journal-tests.jsonl
 """
 from __future__ import annotations
 
@@ -465,6 +472,29 @@ def decoder_echantillons(ip_samples: dict) -> list:
     return out
 
 
+def mandat_actif(path: str) -> tuple[bool, str, str]:
+    """Le mandat autorise-t-il l'enrichissement EN LIGNE (réputation publique) ?
+
+    Exige un mandat SIGNÉ et dans sa période de validité. N'autorise JAMAIS de
+    contact avec l'attaquant : seule la base de réputation publique est interrogée.
+    Renvoie (ok, raison, reference).
+    """
+    try:
+        from tasko.mandat import Mandat
+    except Exception as e:  # noqa: BLE001 - absence du moteur => pas d'enrichissement
+        return False, f"moteur de mandat indisponible ({e})", ""
+    try:
+        m = Mandat.charger(path)
+    except Exception as e:  # noqa: BLE001
+        return False, f"mandat illisible ({e})", ""
+    if not m.signe:
+        return False, "mandat non signé", m.reference
+    jour = datetime.now(timezone.utc).date()
+    if jour < m.valide_du or jour > m.valide_au:
+        return False, f"mandat hors période de validité ({m.valide_du}..{m.valide_au})", m.reference
+    return True, f"mandat {m.reference} actif", m.reference
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Threat intelligence défensif")
     ap.add_argument("logfile", help="Chemin du fichier de log à analyser (.gz accepté)")
@@ -479,6 +509,11 @@ def main() -> int:
                     help="Allowlist d'IP/CIDR de confiance (admin, supervision)")
     ap.add_argument("--mandat-ref", metavar="REF",
                     help="Référence du mandat ayant autorisé l'analyse")
+    ap.add_argument("--mandat", metavar="FICHIER",
+                    help="Mandat signé : REQUIS pour l'enrichissement EN LIGNE "
+                         "(réputation publique). Sans lui, analyse 100%% locale.")
+    ap.add_argument("--journal", metavar="FICHIER",
+                    help="Journal des tests (JSONL) où consigner l'analyse (Annexe C)")
     ap.add_argument("--out", metavar="FICHIER",
                     help="Chemin du dossier de sortie (refuse d'écraser un fichier existant)")
     args = ap.parse_args()
@@ -523,11 +558,26 @@ def main() -> int:
     benign_ips.sort(key=lambda ip: hits[ip], reverse=True)
     benign_ips = benign_ips[: args.top]
 
+    # --- Verrou « en ligne sous mandat » ---------------------------------------
+    # Le DÉCODAGE des preuves reste 100 % local (aucun réseau). L'enrichissement
+    # RÉPUTATION (AbuseIPDB, base PUBLIQUE ; jamais la machine de l'attaquant) n'est
+    # activé que si un mandat SIGNÉ et VALIDE est fourni. Sans mandat : analyse locale.
+    mandat_ref = args.mandat_ref or ""
+    if not ABUSEIPDB_KEY:
+        online_allowed, gate_note = False, "ABUSEIPDB_KEY absente : analyse hors ligne"
+    elif not args.mandat:
+        online_allowed, gate_note = False, "aucun --mandat : enrichissement en ligne désactivé (analyse locale)"
+    else:
+        online_allowed, gate_note, ref_m = mandat_actif(args.mandat)
+        mandat_ref = mandat_ref or ref_m
+    offline = not online_allowed
+
     report = {
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "tool_version": TOOL_VERSION,
         "host": socket.gethostname(),
-        "mandat_ref": args.mandat_ref,
+        "mandat_ref": mandat_ref,
+        "enrichissement": {"en_ligne": online_allowed, "raison": gate_note},
         "params": {
             "logfile": args.logfile,
             "type": args.type,
@@ -559,8 +609,8 @@ def main() -> int:
         "contexte": [],
     }
 
-    offline = not ABUSEIPDB_KEY
-    mode = "hors-ligne, pas d'enrichissement" if offline else "enrichissement réputation"
+    mode = ("enrichissement réputation EN LIGNE (sous mandat)" if online_allowed
+            else f"HORS LIGNE — {gate_note}")
     print(f"--- {len(indicator_ips)} IP suspecte(s) ({mode}) ---\n")
 
     enrichment_stopped = False
@@ -647,6 +697,19 @@ def main() -> int:
     n_dec = sum(1 for i in report["indicators"] if i.get("preuves_decodees"))
     if n_dec:
         print(f"    Payloads décodés (hors ligne) pour {n_dec} IP — voir 'preuves_decodees'.")
+
+    # Journalise l'analyse (Annexe C) si demandé — scelle l'empreinte du dossier.
+    if args.journal:
+        try:
+            from tasko import journal as _j
+            _j.enregistrer(args.journal, _j.Evenement(
+                reference=mandat_ref, cible=os.path.abspath(args.logfile),
+                outil="threat-intel", decision="analysé",
+                raison=f"{len(report['indicators'])} IOC, enrichissement en ligne={online_allowed}",
+                empreinte=digest))
+            print(f"    Journalisé (Annexe C) : {args.journal}")
+        except Exception as e:  # noqa: BLE001
+            print(f"    [avertissement] journalisation ignorée ({e})", file=sys.stderr)
     print("Ce dossier (IOC + réputation + payloads décodés) est transmissible aux")
     print("autorités pour l'attribution. Aucune machine attaquante n'a été contactée.")
     return 0
