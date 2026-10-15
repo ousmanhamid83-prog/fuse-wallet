@@ -19,11 +19,14 @@ MARQUÉES :
     un SOC ne confonde jamais ce test avec une vraie attaque.
 
 Verrou éthique (identique au reste de Tasko Defense) :
-  - si la cible est en boucle locale (127.0.0.0/8, ::1, localhost), c'est le
-    honeypot/pré-prod de l'opérateur lui-même : autorisé SANS mandat ;
-  - sinon, un ``Mandat`` SIGNÉ autorisant ``validation_detection`` sur cette cible
-    est EXIGÉ (via :func:`tasko.mandat.autoriser`). À défaut : refus net, et
-    AUCUNE sonde n'est émise (prouvable par :func:`compteur_envois`).
+  - TOUTE cible, y compris ton propre honeypot en boucle locale, exige un
+    ``Mandat`` SIGNÉ autorisant ``validation_detection`` sur cette cible (via
+    :func:`tasko.mandat.autoriser`). Pour ta propre infra, tu signes un mandat
+    dont tu es à la fois Prestataire et Client (voir mandats/honeypot-local).
+  - À défaut de mandat couvrant la cible : refus net, et AUCUNE sonde n'est émise
+    (prouvable par :func:`compteur_envois`).
+  - Garde de cohérence : l'hôte autorisé doit être exactement celui qui sera
+    contacté, sinon refus (anti-URL forgée).
 
 Bibliothèque standard uniquement (http.client / urllib / socket).
 """
@@ -31,7 +34,6 @@ from __future__ import annotations
 
 import dataclasses
 import http.client
-import ipaddress
 import json
 import socket
 import time
@@ -176,27 +178,11 @@ SONDES: list[Sonde] = [
 # ---------------------------------------------------------------------------
 # Verrou éthique.
 # ---------------------------------------------------------------------------
-def _est_boucle_locale(hote: str) -> bool:
-    """La cible est-elle en boucle locale (honeypot/pré-prod de l'opérateur) ?
-
-    Couvre ``localhost`` et toute IP de loopback (127.0.0.0/8, ::1).
-    """
-    if not hote:
-        return False
-    h = hote.strip().lower()
-    if h in ("localhost", "ip6-localhost", "localhost.localdomain"):
-        return True
-    try:
-        return ipaddress.ip_address(h).is_loopback
-    except ValueError:
-        return False
-
-
 def _autoriser_cible(cible, hote, mandat, ip_source, moment, reference):
     """Décide si la validation de détection peut viser ``cible``.
 
-    Boucle locale -> autorisé sans mandat. Sinon -> mandat autorisant
-    ``validation_detection`` EXIGÉ. Retourne ``(autorise, raison, reference)``.
+    TOUTE cible (y compris la boucle locale) exige un mandat signé autorisant
+    ``validation_detection``. Retourne ``(autorise, raison, reference)``.
     """
     # Garde de cohérence : l'hôte AUTORISÉ (extraire_hote) doit être exactement
     # celui qu'on CONTACTERA (urlsplit). Sinon, une URL forgée pourrait faire
@@ -208,16 +194,13 @@ def _autoriser_cible(cible, hote, mandat, ip_source, moment, reference):
                 f"contacté {hote_contacte!r} — AUCUNE sonde émise",
                 reference)
 
-    if _est_boucle_locale(hote):
-        return (True,
-                "cible en boucle locale (honeypot/pré-prod de l'opérateur) : "
-                "validation de détection autorisée sans mandat",
-                reference)
+    # Plus d'exception « boucle locale » : tout passe par le mandat, y compris
+    # ton propre honeypot (tu signes un mandat de ta propre infra).
     if mandat is None:
         return (False,
-                "cible NON locale et aucun mandat fourni : la validation de "
-                "détection exige un mandat signé autorisant 'validation_detection' "
-                "sur cette cible — AUCUNE sonde émise",
+                "aucun mandat fourni : la validation de détection exige un mandat "
+                "signé autorisant 'validation_detection' sur cette cible — y compris "
+                "pour ton propre honeypot. AUCUNE sonde émise",
                 reference)
     decision = autoriser(mandat, cible, "validation_detection",
                          moment=moment, ip_source=ip_source)

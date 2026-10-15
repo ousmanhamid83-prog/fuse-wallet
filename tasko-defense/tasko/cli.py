@@ -22,6 +22,7 @@ from . import journal as _journal
 from . import rapport as _rapport
 from . import poc as _poc
 from . import purple as _purple
+from . import preuve as _preuve
 
 CODE_OK = 0
 CODE_REFUSE = 2
@@ -204,6 +205,28 @@ def _cmd_purple(args: argparse.Namespace) -> int:
     return CODE_OK if rapport.get("autorise") else CODE_REFUSE
 
 
+def _cmd_preuve(args: argparse.Namespace) -> int:
+    if args.fichier:
+        if not os.path.isfile(args.fichier):
+            print(f"ERREUR : fichier introuvable : {args.fichier}", file=sys.stderr)
+            return CODE_ERREUR
+        analyse = _preuve.analyser(args.fichier, est_fichier=True)
+    elif args.texte is not None:
+        analyse = _preuve.analyser(args.texte)
+    else:
+        print("ERREUR : fournir --fichier ou --texte", file=sys.stderr)
+        return CODE_ERREUR
+    md = _preuve.rendre_markdown(analyse)
+    if args.sortie:
+        with open(args.sortie, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"Analyse écrite : {args.sortie} "
+              f"({analyse['deobfuscation']['profondeur']} couche(s) décodée(s))")
+    else:
+        sys.stdout.write(md)
+    return CODE_OK
+
+
 def construire_parseur() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tasko", description="Tasko Defense — outils cadrés par mandat")
     p.add_argument("--version", action="version", version=f"tasko {__version__}")
@@ -271,7 +294,7 @@ def construire_parseur() -> argparse.ArgumentParser:
 
     pu = sous.add_parser("purple", help="rejoue des sondes inertes pour valider la détection")
     pu.add_argument("--cible", required=True, help="URL du honeypot/pré-prod (http://127.0.0.1:8080/)")
-    pu.add_argument("--mandat", default=None, help="requis si la cible n'est PAS en boucle locale")
+    pu.add_argument("--mandat", required=True, help="mandat signé autorisant validation_detection (requis pour TOUTE cible, honeypot local inclus)")
     pu.add_argument("--ip-source", default=None)
     pu.add_argument("--journal", default=None)
     pu.add_argument("--reference", default=None)
@@ -281,6 +304,12 @@ def construire_parseur() -> argparse.ArgumentParser:
     pu.add_argument("--ssh-port", type=int, default=2222)
     pu.add_argument("--sortie", default=None)
     pu.set_defaults(func=_cmd_purple)
+
+    pe = sous.add_parser("preuve", help="décode/désobfusque un artefact détenu (défensif, hors ligne)")
+    pe.add_argument("--fichier", default=None, help="chemin d'un artefact (payload, extrait de log)")
+    pe.add_argument("--texte", default=None, help="artefact fourni directement en argument")
+    pe.add_argument("--sortie", default=None, help="fichier .md de sortie (sinon stdout)")
+    pe.set_defaults(func=_cmd_preuve)
     return p
 
 

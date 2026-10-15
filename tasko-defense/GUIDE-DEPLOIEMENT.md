@@ -286,17 +286,36 @@ qu'elles sont bien capturées. Ce n'est pas une attaque : aucune n'exploite quoi
 que ce soit, la cible est inerte/autorisée, et une cible externe non autorisée
 est refusée sans qu'aucune sonde ne parte.
 
+Le mode purple exige un **mandat pour toute cible** — y compris ton propre
+honeypot (tu signes `mandats/honeypot-local.mandat.yaml`, dont tu es à la fois
+Prestataire et Client). C'est le principe « tout sous mandat ».
+
 ```bash
 cd tasko-defense
-# Contre ton honeypot local (boucle locale : autorisé sans mandat)
+# Contre TON honeypot local : signe d'abord mandats/honeypot-local.mandat.yaml
 python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
+    --mandat mandats/honeypot-local.mandat.yaml \
     --honeypot-log /var/log/tasko-honeypot/honeypot.log --ssh --ssh-port 2222 \
     --journal journal-tests.jsonl --sortie rapport-purple.md
 
-# Contre une pré-prod d'un client : exige un mandat autorisant validation_detection
+# Contre une pré-prod d'un client : mandat autorisant validation_detection
 python3 -m tasko.cli purple --cible https://preprod.client.cm/ \
     --mandat mandats/client.mandat.yaml --ip-source 198.51.100.10
 ```
+
+### Analyser une preuve trouvée (décodage défensif)
+
+Quand un payload obscurci apparaît dans un log ou un web shell, `preuve` déroule
+ses couches d'encodage pour en révéler le texte et aider à le documenter — sans
+rien exécuter, sans casser ni déchiffrer de secret :
+
+```bash
+python3 -m tasko.cli preuve --fichier /chemin/payload-trouve.txt --sortie analyse.md
+python3 -m tasko.cli preuve --texte 'PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOw=='
+```
+
+Il identifie aussi le *type* d'un hash (sans le casser) et extrait les IOC, pour
+le dossier threat-intel transmis aux autorités.
 
 Chaque sonde marquée **DÉTECTÉ** doit déclencher une règle Wazuh ; une sonde
 **NON DÉTECTÉ** révèle un trou de détection (règle manquante, log non ingéré) à
