@@ -99,31 +99,6 @@ Deux fonctionnalités demandées, en restant strictement défensif et éthique.
 > « exploitation contrôlée » est active via le verrou (Annexe D) + le scellement
 > de preuve ; l'acte d'exploitation reste humain, autorisé et documenté.
 
-## 2026-10-15 — Durcissement « tout sous mandat » + analyseur de preuves ; refus de l'offensif
-
-Sur demande : rendre les garde-fous éthiques dépendants du mandat partout, et
-aller « plus loin ». Traitement en deux temps.
-
-- **Purple : plus d'exception locale.** Suppression de la branche « boucle locale
-  autorisée sans mandat ». TOUTE cible, honeypot local inclus, exige désormais un
-  mandat signé `validation_detection`. Gabarit `mandats/honeypot-local.mandat.yaml`
-  (l'opérateur est Prestataire ET Client de sa propre infra). CLI : `--mandat`
-  devient obligatoire pour `purple`. Garde de cohérence hôte autorisé == contacté
-  conservé. Tests purple adaptés ; suite verte.
-- **Analyseur de preuves `tasko/preuve.py` (défensif).** Décode/désobfusque un
-  artefact détenu (base64, hex, URL, HTML, gzip/zlib, fromCharCode, \x/\u, rot13),
-  identifie le *type* d'un hash sans le casser, extrait les IOC, résume le
-  comportement apparent. Hors ligne, n'exécute rien. 9 assertions.
-
-**Refus assumé, non négociable.** La demande incluait « plus de fonctionnalités
-d'exploitation » et « déchiffrement de preuve ». Refusé : pas de moteur
-d'exploitation automatisée, pas de cassage de hash/mot de passe, pas de
-déchiffrement de secret par clé non détenue. C'est la ligne que tout le projet
-tient (mandat Art. 2.4 / Annexe D) et elle ne dépend ni de la cible ni du mandat.
-Le besoin légitime « comprendre une preuve technique » est couvert par `preuve`
-(décodage de ce qu'on détient) ; l'exploitation reste humaine, autorisée et
-documentée via `poc`.
-
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

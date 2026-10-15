@@ -24,25 +24,8 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   détection se déclenche ; mesure DÉTECTÉ/NON DÉTECTÉ via le log honeypot et renvoie
   vers Wazuh. Boucle locale autorisée sans mandat ; toute autre cible exige un mandat.
   Garde de cohérence hôte autorisé == hôte contacté. Aucun exploit, pas de DoS.
-- **Analyseur de preuves** `tasko/preuve.py` : décode/désobfusque un artefact détenu
-  (base64/base64url, hex, URL, entités HTML, gzip/zlib, String.fromCharCode, \x/\u,
-  rot13), identifie le *type* des hashs (MD5/SHA/bcrypt/JWT, SANS cassage), extrait
-  les IOC et résume le comportement apparent. Hors ligne, n'exécute rien, ne casse ni
-  ne déchiffre aucun secret. 9 assertions.
 - **CLI étendu** : `verifier` (+ `--journal`), `info`, `nouveau-mandat`, `journaliser`,
-  `journal`, `rapport`, `poc`, `purple`, `preuve`.
-
-### Modifié (durcissement éthique)
-- **Mode purple — mandat exigé pour TOUTE cible** : suppression de l'exception
-  « boucle locale autorisée sans mandat ». Même le honeypot local requiert désormais
-  un mandat signé `validation_detection` (gabarit `mandats/honeypot-local.mandat.yaml`,
-  l'opérateur le signe pour sa propre infra). Garde de cohérence hôte autorisé ==
-  hôte contacté conservé.
-
-### Refusé par conception (hors périmètre, non négociable)
-- Pas de moteur d'exploitation automatisée ; pas de cassage de hash/mot de passe ;
-  pas de déchiffrement de secret par clé non détenue. L'exploitation reste un acte
-  humain, autorisé (Annexe D) et documenté (`poc`), jamais une arme intégrée.
+  `journal`, `rapport`, `poc`, `purple`.
 - Scans câblés : journalisation automatique (empreintes) + génération du rapport et
   de l'Annexe C en fin d'exécution.
 - `mandats/` : gabarits `exemple` et `tchadone` (non signés par défaut).

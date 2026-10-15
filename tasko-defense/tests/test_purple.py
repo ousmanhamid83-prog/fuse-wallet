@@ -67,29 +67,6 @@ def mandat_validation(**over) -> Mandat:
     return Mandat.depuis_dict(base)
 
 
-def mandat_local(**over) -> Mandat:
-    """Mandat SIGNÉ de l'opérateur pour SON propre honeypot (127.0.0.0/8).
-
-    Modélise le cas « tout sous mandat » : même la boucle locale exige un mandat
-    (l'opérateur est à la fois Prestataire et Client de sa propre infra).
-    """
-    base = {
-        "reference": "T-HONEYPOT-LOCAL",
-        "signe": True,
-        "valide_du": "2020-01-01",
-        "valide_au": "2099-12-31",
-        "fuseau": "UTC",
-        "fenetres": [],          # pas de restriction de fenêtre pour sa propre infra
-        "ip_source": [],         # pas de contrôle d'IP source en local
-        "perimetre": {"domaines": [], "ips": ["127.0.0.0/8"], "heberge_dedie": True},
-        "exclusions": {"domaines": [], "ips": []},
-        "annexe_d_signee": False,
-        "tests_autorises": {"validation_detection": True},
-    }
-    base.update(over)
-    return Mandat.depuis_dict(base)
-
-
 def attendre_port(host, port, timeout=15.0) -> bool:
     """Attend que `host:port` accepte une connexion (honeypot prêt)."""
     fin = time.time() + timeout
@@ -138,18 +115,10 @@ def test_refus_ethique() -> bool:
     refus, _, _ = purple._autoriser_cible("https://exemple.cm/", "exemple.cm",
                                           None, None, DANS, "")
     ok &= check(not refus, "pas de mandat : validation_detection refusée (hors ligne)")
-    # Boucle locale SANS mandat : désormais REFUSÉE (plus d'exception locale).
+    # Boucle locale : autorisée sans mandat.
     loc, _, _ = purple._autoriser_cible("http://127.0.0.1:18080/", "127.0.0.1",
                                         None, None, DANS, "")
-    ok &= check(not loc, "boucle locale SANS mandat : refusée (tout passe par le mandat)")
-    # Boucle locale AVEC un mandat de l'opérateur : autorisée.
-    locm, _, _ = purple._autoriser_cible("http://127.0.0.1:18080/", "127.0.0.1",
-                                         mandat_local(), None, None, "")
-    ok &= check(locm, "boucle locale AVEC mandat de l'opérateur : autorisée")
-    # Garde de cohérence : hôte autorisé != hôte contacté -> refus.
-    inc, raison_inc, _ = purple._autoriser_cible("http://127.0.0.1@ailleurs.example/",
-                                                 "127.0.0.1", mandat_local(), None, None, "")
-    ok &= check(not inc, "incohérence d'URL (hôte autorisé != contacté) : refusée")
+    ok &= check(loc, "boucle locale : autorisée sans mandat")
     return ok
 
 
@@ -183,10 +152,10 @@ def test_nominal_local() -> bool:
             return False
 
         purple.reinitialiser_compteur()
-        rap = purple.rejouer("http://127.0.0.1:18080/", mandat=mandat_local(),
+        rap = purple.rejouer("http://127.0.0.1:18080/",
                              honeypot_log=log_hp, journal=journal_tests, pause=0.05)
 
-        ok &= check(rap["autorise"] is True, "cible locale : autorisée (mandat de l'opérateur)")
+        ok &= check(rap["autorise"] is True, "cible locale : autorisée sans mandat")
         ok &= check(rap["envoyees"] == len(purple.SONDES),
                     f"{len(purple.SONDES)} sondes émises")
         ok &= check(purple.compteur_envois() == len(purple.SONDES),
@@ -224,9 +193,9 @@ def test_nominal_local() -> bool:
         if check(attendre_port("127.0.0.1", PORT_SSH),
                  f"honeypot SSH en écoute sur 127.0.0.1:{PORT_SSH}"):
             rap_ssh = purple.sonder_ssh("127.0.0.1", port=PORT_SSH,
-                                        mandat=mandat_local(), journal=journal_tests)
+                                        journal=journal_tests)
             ok &= check(rap_ssh["autorise"] and rap_ssh["envoyees"] == 1,
-                        "sonde SSH locale émise (1 connexion inerte, sous mandat)")
+                        "sonde SSH locale émise (1 connexion inerte)")
             time.sleep(0.6)  # laisse le honeypot journaliser la bannière reçue
             with open(log_hp, "r", encoding="utf-8") as f:
                 contenu = f.read()
