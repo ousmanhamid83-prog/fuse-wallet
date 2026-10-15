@@ -215,6 +215,14 @@ et destiné aux autorités. Seules les IP **clientes** sont retenues (plus de fa
 positifs tirés des User-Agent ou des payloads). Aucune machine attaquante n'est
 contactée.
 
+**Décodage automatique des payloads (preuve branché).** Pour chaque IP suspecte,
+threat-intel désobfusque automatiquement les payloads repérés dans ses extraits de
+preuve (URL-encodage, base64/hex embarqués, gzip, `fromCharCode`…) et ajoute un
+champ `preuves_decodees` au dossier : couches décodées, comportement apparent et
+IOC révélés. C'est purement local (aucune exécution, aucun réseau) et ça évite de
+décoder les payloads à la main. Exemple : une requête `?id=1%20UNION%20SELECT`
+apparaît décodée en clair dans le dossier, prête pour les autorités.
+
 ### Étape 5 — Réponse à incident (le jour J)
 
 Si un client est compromis, suis `docs/playbook-incident.md`. L'ordre **non

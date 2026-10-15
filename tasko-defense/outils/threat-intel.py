@@ -55,7 +55,19 @@ import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
-TOOL_VERSION = "2.0.0"
+# Branche l'analyseur de preuves (décodage/désobfuscation DÉFENSIF, hors ligne).
+# Optionnel : si le paquet tasko n'est pas sur le PATH, on continue sans décodage.
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from tasko import preuve as _preuve
+except Exception:  # noqa: BLE001 - l'absence du module ne doit jamais casser l'analyse
+    _preuve = None
+
+TOOL_VERSION = "2.1.0"
+
+# Jetons longs (base64/base64url/hex) potentiellement encodés, embarqués dans une
+# ligne. Le '=' n'est accepté qu'en padding final (sinon on happe le '=' de 'p=...').
+_RE_TOKEN = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
 
 # Clé lue au démarrage : si vide => mode hors-ligne, `requests` n'est jamais importé.
 ABUSEIPDB_KEY = os.environ.get("ABUSEIPDB_KEY", "")
@@ -413,6 +425,46 @@ def sha256_file(path: str) -> str:
     return h.hexdigest()
 
 
+def decoder_echantillons(ip_samples: dict) -> list:
+    """Décode (défensivement) les payloads obscurcis des extraits de preuve d'une IP.
+
+    Pour chaque extrait : on tente de désobfusquer la ligne entière (gère
+    l'URL-encodage) ET chaque jeton long (base64/hex embarqué). On ne retient que
+    les décodages qui RÉVÈLENT quelque chose (au moins une couche, ou un
+    comportement repéré). Purement local, aucune exécution, aucun réseau.
+    """
+    if _preuve is None:
+        return []
+    out, vus = [], set()
+    for label, bucket in ip_samples.items():
+        for s in bucket:
+            raw = s.get("raw_line_excerpt", "")
+            if not raw:
+                continue
+            for cand in [raw] + _RE_TOKEN.findall(raw):
+                deob = _preuve.deobfusquer(cand)
+                final = deob["final"]
+                comp = _preuve.comportement_apparent(cand + "\n" + final)
+                if deob["profondeur"] < 1 and not comp:
+                    continue
+                cle = final[:280]
+                if cle in vus:
+                    continue
+                vus.add(cle)
+                entree = {
+                    "signature": label,
+                    "line_no": s.get("line_no"),
+                    "couches": [c["methode"] for c in deob["couches"]],
+                    "revele": final[:280],
+                    "comportement_apparent": comp,
+                }
+                iocs = _preuve.extraire_iocs(final)
+                if any(iocs.values()):
+                    entree["iocs_revele"] = iocs
+                out.append(entree)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Threat intelligence défensif")
     ap.add_argument("logfile", help="Chemin du fichier de log à analyser (.gz accepté)")
@@ -534,7 +586,14 @@ def main() -> int:
         ip_samples = {label: res["samples"].get(ip, {}).get(label, [])
                       for label in ip_sigs if res["samples"].get(ip, {}).get(label)}
 
-        report["indicators"].append({
+        # Décodage défensif des payloads obscurcis (preuve branché).
+        preuves_dec = decoder_echantillons(ip_samples)
+        if preuves_dec:
+            comps = sorted({c for e in preuves_dec for c in e["comportement_apparent"]})
+            if comps:
+                print(f"     payload décodé -> {', '.join(comps[:6])}")
+
+        indic = {
             "ip": ip,
             "request_count": hits[ip],
             "signature_count": len(ip_sigs),
@@ -543,7 +602,10 @@ def main() -> int:
             "last_seen": res["last_seen"].get(ip, "inconnu"),
             "samples": ip_samples,
             "reputation": rep,
-        })
+        }
+        if preuves_dec:
+            indic["preuves_decodees"] = preuves_dec
+        report["indicators"].append(indic)
 
     for ip in benign_ips:
         report["contexte"].append({
@@ -582,8 +644,11 @@ def main() -> int:
     print(f"\n=== Dossier enregistré : {out} ===")
     print(f"    SHA-256 : {digest}")
     print(f"    Empreinte : {sha_path}")
-    print("Ce dossier (IOC + réputation) est transmissible aux autorités pour")
-    print("l'attribution. Aucune machine attaquante n'a été contactée.")
+    n_dec = sum(1 for i in report["indicators"] if i.get("preuves_decodees"))
+    if n_dec:
+        print(f"    Payloads décodés (hors ligne) pour {n_dec} IP — voir 'preuves_decodees'.")
+    print("Ce dossier (IOC + réputation + payloads décodés) est transmissible aux")
+    print("autorités pour l'attribution. Aucune machine attaquante n'a été contactée.")
     return 0
 
 

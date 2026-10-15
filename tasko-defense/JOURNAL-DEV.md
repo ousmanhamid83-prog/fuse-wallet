@@ -137,6 +137,22 @@ Fusion ciblée de `cli.py` (ajout de l'import + `_cmd_preuve` + sous-commande
 6 fichiers de tests, tous verts. Rien d'offensif ajouté ; le refus du moteur
 d'exploitation/red-team reste entier.
 
+## 2026-10-15 — `preuve` branché dans `threat-intel` (décodage auto des payloads)
+
+Sur demande : brancher l'analyseur de preuves dans le threat-intel pour décoder
+automatiquement les payloads repérés dans les logs — gain de temps, purement
+défensif.
+
+- Import tolérant de `tasko.preuve` dans `outils/threat-intel.py` (si absent, on
+  continue sans décodage). `decoder_echantillons()` désobfusque la ligne entière
+  (URL-encodage) et chaque jeton long (base64/hex embarqué) des extraits de preuve
+  d'une IP, ne retient que ce qui révèle quelque chose, et ajoute `preuves_decodees`
+  à l'indicateur (couches, comportement apparent, IOC révélés).
+- Local, hors ligne, aucune exécution. Regex de jeton corrigée (`=` seulement en
+  padding final) pour décoder un base64 embarqué après `p=`.
+- `threat-intel` 2.1.0. Test `tests/test_threat_intel_preuve.py` (chaîne complète
+  analyze_log → décodage). Suite complète : 7 fichiers, tous verts.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

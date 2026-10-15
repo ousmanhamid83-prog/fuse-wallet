@@ -32,6 +32,11 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   vers Wazuh. **Mandat exigé pour TOUTE cible** (honeypot local inclus ; gabarit
   `mandats/honeypot-local.mandat.yaml`). Garde de cohérence hôte autorisé == hôte
   contacté. Aucun exploit, pas de DoS.
+- **`preuve` branché dans `threat-intel`** : pour chaque IP suspecte, les payloads
+  des extraits de preuve sont automatiquement décodés/désobfusqués (URL, base64/hex
+  embarqués, gzip, fromCharCode…) et ajoutés au dossier sous `preuves_decodees`
+  (couches, comportement apparent, IOC révélés). Local, hors ligne, n'exécute rien.
+  `threat-intel` 2.1.0. Test d'intégration `tests/test_threat_intel_preuve.py`.
 - **Analyseur de preuves** `tasko/preuve.py` : décode/désobfusque un artefact détenu
   (base64/base64url, hex, URL, entités HTML, gzip/zlib, String.fromCharCode, \x/\u,
   rot13), identifie le *type* des hashs (MD5/SHA/bcrypt/JWT, SANS cassage), extrait les
