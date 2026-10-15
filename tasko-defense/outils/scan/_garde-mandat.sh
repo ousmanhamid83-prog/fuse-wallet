@@ -12,6 +12,25 @@
 _GARDE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASKO_ROOT="$(cd "$_GARDE_DIR/../.." && pwd)"
 
+# Enveloppe : exécute le CLI tasko depuis la racine du paquet (import tasko OK).
+tasko_cli() { ( cd "$TASKO_ROOT" && python3 -m tasko.cli "$@" ); }
+
+# journaliser_outil <journal> <reference> <cible> <type> <outil> <ip_source> <decision> [fichier_empreinte]
+# Consigne un lancement d'outil au journal des tests (Article 8 / Annexe C).
+journaliser_outil() {
+  local journal="$1" ref="$2" cible="$3" type_test="$4" outil="$5" ip="$6" dec="$7" emp="${8:-}"
+  [ -n "$journal" ] || return 0
+  local args=(journaliser --fichier "$journal" --reference "$ref" --cible "$cible" \
+              --outil "$outil" --decision "$dec")
+  [ -n "$type_test" ] && args+=(--type "$type_test")
+  [ -n "$ip" ] && args+=(--ip-source "$ip")
+  [ -n "$emp" ] && [ -f "$emp" ] && args+=(--empreinte-de "$emp")
+  tasko_cli "${args[@]}" >/dev/null 2>&1 || true
+}
+
+# reference_mandat <mandat> : imprime la référence du mandat (pour les journaux/rapports).
+reference_mandat() { tasko_cli info --mandat "$1" 2>/dev/null | sed -n 's/^Référence *: //p' | head -1; }
+
 exiger_mandat() {
   local mandat="$1" cible="$2" type_test="$3" ip_source="${4:-}"
 

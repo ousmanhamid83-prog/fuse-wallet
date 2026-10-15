@@ -13,3 +13,5 @@ mandats/*.mandat.yaml
 !mandats/tchadone.mandat.yaml
 *.pid
 *.service-test
+rapports/
+rapports-reseau/

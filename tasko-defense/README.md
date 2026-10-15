@@ -28,6 +28,20 @@ Les scripts de scan appellent ce verrou automatiquement : une cible non couverte
 est ignorée (scan web) ou bloque le scan (scan réseau). Tant que `signe: false`,
 **rien** n'est autorisé.
 
+En fin de scan, le logiciel produit deux livrables automatiquement :
+
+```bash
+# Rapport client trié par sévérité (Nuclei + WPScan + ZAP + Nmap agrégés)
+python3 -m tasko.cli rapport --dossier rapports/<date> --mandat mandats/x.yaml -o rapport.md
+
+# Journal des tests → Annexe C (preuve du caractère autorisé, Article 8)
+python3 -m tasko.cli journal --fichier rapports/<date>/journal-tests.jsonl -o annexe-C.md
+
+# Créer un nouveau mandat (non signé) depuis le gabarit
+python3 -m tasko.cli nouveau-mandat --reference TASKO-2026-client-001 \
+    --domaine client.cm --sortie mandats/client.mandat.yaml
+```
+
 Pour un nouveau site : copier `mandats/exemple.mandat.yaml`, remplir le périmètre,
 faire **signer** le mandat papier par le propriétaire, puis passer `signe: true`.
 
@@ -36,6 +50,8 @@ faire **signer** le mandat papier par le propriétaire, puis passer `signe: true
 | Chemin | Rôle |
 |--------|------|
 | `tasko/mandat.py`, `tasko/cli.py` | Moteur de mandat + CLI (le verrou) |
+| `tasko/journal.py` | Journal des tests (Article 8 / Annexe C : preuve + empreintes) |
+| `tasko/rapport.py` | Générateur de rapport client (Article 6 : vulnérabilités + CVSS) |
 | `mandats/` | Mandats lisibles par machine (gabarits non signés fournis) |
 | `mandat/mandat-audit-v2.md` | Mandat juridique (règles d'engagement) |
 | `outils/scan/scan-web.sh` | Audit web (Nuclei + WPScan), cadré par le mandat |

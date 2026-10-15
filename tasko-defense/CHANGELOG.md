@@ -10,8 +10,18 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
   par machine autorise ou refuse chaque test (signature, dates, fenêtres horaires,
   périmètre par labels, exclusions, type de test, IP source ; `scan_reseau` exige
   un hébergement dédié ; `exploitation` exige l'Annexe D). 22 tests unitaires.
+- **Journal des tests** `tasko/journal.py` (Article 8 / Annexe C) : chaque décision
+  et chaque lancement d'outil consignés en JSONL (horodatage UTC, opérateur, cible,
+  outil, IP source, décision, empreinte SHA-256), restituables en Annexe C Markdown.
+- **Générateur de rapport** `tasko/rapport.py` (Article 6) : agrège Nuclei, WPScan,
+  ZAP et Nmap en findings normalisés, dédupliqués, triés par sévérité, avec CVE/CWE
+  et recommandations, en rapport client Markdown. 14 tests unitaires.
+- **CLI étendu** : `verifier` (+ `--journal`), `info`, `nouveau-mandat`, `journaliser`,
+  `journal`, `rapport`.
+- Scans câblés : journalisation automatique (empreintes) + génération du rapport et
+  de l'Annexe C en fin d'exécution.
 - `mandats/` : gabarits `exemple` et `tchadone` (non signés par défaut).
-- `outils/scan/_garde-mandat.sh` : garde partagé appelé par les scripts de scan.
+- `outils/scan/_garde-mandat.sh` : garde partagé + helpers journal/rapport.
 - `README.md`, `JOURNAL-DEV.md`, `requirements.txt`, `.gitignore`, `sites.txt.exemple`.
 
 ### Corrigé (scans)

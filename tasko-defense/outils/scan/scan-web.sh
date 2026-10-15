@@ -28,7 +28,9 @@ SITES_FILE="${SITES_FILE:-sites.txt}"
 WPSCAN_TOKEN="${WPSCAN_API_TOKEN:-}"
 AUDIT_IP="${AUDIT_IP:-}"
 DATE=$(date +%Y%m%d-%H%M)
-OUT="rapports/$DATE"
+# Chemin ABSOLU : les appels à tasko_cli changent de répertoire (cd TASKO_ROOT),
+# donc un chemin relatif serait résolu au mauvais endroit.
+OUT="$PWD/rapports/$DATE"
 RATE_LIMIT="${RATE_LIMIT:-30}"     # requêtes/seconde max
 THROTTLE_MS="${THROTTLE_MS:-500}"  # pause entre requêtes WPScan
 
@@ -52,8 +54,11 @@ else
 fi
 [ -s "$CIBLES" ] || die "aucune cible à scanner."
 
+JOURNAL="$OUT/journal-tests.jsonl"
+REF="$(reference_mandat "$MANDAT")"
+
 echo "=== Audit web défensif : $DATE ==="
-echo "Mandat  : $MANDAT"
+echo "Mandat  : $MANDAT ($REF)"
 echo "Cibles  : $(wc -l < "$CIBLES") | Rapports -> $OUT"
 echo ""
 
@@ -62,7 +67,7 @@ echo "--- Vérification du mandat (scan_web) ---"
 AUTORISEES="$OUT/cibles-autorisees.txt"; : > "$AUTORISEES"
 while IFS= read -r URL || [ -n "$URL" ]; do
   [ -z "$URL" ] && continue
-  gargs=(verifier --mandat "$MANDAT" --cible "$URL" --type scan_web)
+  gargs=(verifier --mandat "$MANDAT" --cible "$URL" --type scan_web --journal "$JOURNAL" --outil tasko-gate)
   [ -n "$AUDIT_IP" ] && gargs+=(--ip-source "$AUDIT_IP")
   if ( cd "$TASKO_ROOT" && python3 -m tasko.cli "${gargs[@]}" ); then
     echo "$URL" >> "$AUTORISEES"
@@ -99,6 +104,7 @@ nuclei -l "$AUTORISEES" \
        -jsonl -o "$OUT/nuclei.jsonl" \
        -stats > "$OUT/nuclei.log" 2>&1 || NRC=$?
 if [ "$NRC" -eq 0 ]; then echo "  -> $OUT/nuclei.jsonl"; else echo "  [ÉCHEC nuclei code $NRC] voir $OUT/nuclei.log"; fi
+journaliser_outil "$JOURNAL" "$REF" "(liste)" "scan_web" "nuclei" "$AUDIT_IP" "terminé (code $NRC)" "$OUT/nuclei.jsonl"
 echo ""
 
 # --- Étape 2 : WPScan (WordPress), avec interprétation du code de sortie ---
@@ -124,9 +130,18 @@ while IFS= read -r URL || [ -n "$URL" ]; do
     4) echo "    [ÉCHEC WPScan] token invalide ou cible injoignable — voir $OUT/wpscan.stderr" ;;
     *) echo "    [code $WRC] voir $OUTJSON / $OUT/wpscan.stderr (souvent : pas WordPress)" ;;
   esac
+  journaliser_outil "$JOURNAL" "$REF" "$URL" "scan_web" "wpscan" "$AUDIT_IP" "terminé (code $WRC)" "$OUTJSON"
 done < "$AUTORISEES"
 echo ""
 
+# --- Rapport client (Article 6) + Annexe C (Article 8) ---
+echo "--- Génération du rapport ---"
+tasko_cli rapport --dossier "$OUT" --mandat "$MANDAT" --date "$DATE" --sortie "$OUT/rapport.md" || true
+tasko_cli journal --fichier "$JOURNAL" --sortie "$OUT/annexe-C-journal.md" >/dev/null 2>&1 || true
+echo ""
+
 echo "=== Audit terminé ==="
-echo "Rapports : $OUT"
+echo "Rapports   : $OUT"
+echo "Rapport    : $OUT/rapport.md"
+echo "Journal    : $OUT/annexe-C-journal.md (preuve Article 8)"
 echo "Trie les findings par sévérité (critical/high d'abord), corrige, puis relance."

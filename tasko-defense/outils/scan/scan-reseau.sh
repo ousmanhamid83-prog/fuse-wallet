@@ -42,9 +42,13 @@ echo ""
 
 DATE=$(date +%Y%m%d-%H%M)
 SLUG=$(printf '%s' "$TARGET" | sed 's|[^a-zA-Z0-9.]|_|g')
-OUT="rapports-reseau/${SLUG}_${DATE}"
+# Chemin ABSOLU (tasko_cli fait cd vers la racine du paquet).
+OUT="$PWD/rapports-reseau/${SLUG}_${DATE}"
 mkdir -p "$OUT"
 chmod 700 "$OUT" 2>/dev/null || true
+JOURNAL="$OUT/journal-tests.jsonl"
+REF="$(reference_mandat "$MANDAT")"
+journaliser_outil "$JOURNAL" "$REF" "$TARGET" "scan_reseau" "tasko-gate" "$AUDIT_IP" "autorisé"
 
 echo "=== Audit réseau défensif : $TARGET ($DATE) ==="
 echo ""
@@ -67,7 +71,19 @@ echo "--- 3. Audit TLS/SSL ---"
 nmap --script "ssl-enum-ciphers,ssl-cert" -p 443 "$TARGET" -oN "$OUT/tls.txt"
 echo "  -> $OUT/tls.txt"; echo ""
 
+# Journalise les sorties nmap (empreintes, Article 8)
+for F in ports vuln tls; do
+  journaliser_outil "$JOURNAL" "$REF" "$TARGET" "scan_reseau" "nmap ($F)" "$AUDIT_IP" "terminé" "$OUT/$F.txt"
+done
+
+# --- Rapport client (Article 6) + Annexe C (Article 8) ---
+echo "--- Génération du rapport ---"
+tasko_cli rapport --dossier "$OUT" --mandat "$MANDAT" --date "$DATE" --sortie "$OUT/rapport.md" || true
+tasko_cli journal --fichier "$JOURNAL" --sortie "$OUT/annexe-C-journal.md" >/dev/null 2>&1 || true
+echo ""
+
 echo "=== Terminé ==="
 echo "Rapports : $OUT"
+echo "Rapport  : $OUT/rapport.md    Journal : $OUT/annexe-C-journal.md"
 echo "À corriger : ports inutiles -> fermer ; services obsolètes -> mettre à jour ;"
 echo "chiffrements TLS faibles -> désactiver."
