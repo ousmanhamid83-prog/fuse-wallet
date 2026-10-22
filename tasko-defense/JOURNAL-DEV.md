@@ -224,6 +224,26 @@ interface de **lecture seule**, sans surface d'exécution.
   `rapport.vers_structure()` + test. Vérif : syntaxe JS (node --check) OK, structure
   OK ; suite complète 7 fichiers verts. (Rendu navigateur auto indisponible ici.)
 
+## 2026-10-22 — Serveur web LOCAL avec exécution (agilité), cadré
+
+Demande : exécution + serveur web en local pour plus d'agilité, avec mandat à
+sélectionner. Livré `tasko/serveur.py` (`tasko serveur`) — un serveur qui lance
+les audits DÉFENSIFS existants, pas une surface d'exécution ouverte :
+
+- **127.0.0.1 uniquement** (bind loopback), hôte non local refusé (anti-rebinding).
+- **Jeton** aléatoire au démarrage, exigé pour toute action (en-tête ou `?t=`).
+- **Liste blanche** d'actions : mandats (liste), verifier (aperçu du verrou), audit
+  (lance `audit-parc.sh`), rapport (charge findings). PAS de commande arbitraire.
+- Chemins **confinés** au projet (`_confiner`, `_mandat_path`) : traversée/chemin
+  absolu/extension non-yaml refusés. Outils via argv (pas de `shell=True`).
+- Chaque scan reste gated par le mandat ; aucun moteur d'exploit.
+- Le tableau de bord affiche un panneau « Exécution (serveur local) » quand `?t=`
+  est présent : choix du mandat (liste), inventaire, type, bouton Lancer.
+
+Tests `tests/test_serveur.py` (18 assertions) : jeton exigé, hôte local, traversée
+refusée, liste blanche, verrou, et un audit réel via stubs (8.8.8.8 hors mandat
+ignoré). Suite complète : 8 fichiers, tous verts. JS du dashboard vérifié (node --check).
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

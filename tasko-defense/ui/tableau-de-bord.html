@@ -141,6 +141,20 @@
     <span class="pill" id="copied" style="display:none">copié ✓</span>
     <div class="note" style="margin-top:12px">Rappel&nbsp;: chaque hôte est vérifié contre le mandat avant scan ; un hôte hors mandat est ignoré. L'audit <strong>trouve</strong> les failles — il n'exploite rien.</div>
   </section>
+
+  <section class="panel" id="p-exec" style="display:none">
+    <h2>Exécution (serveur local) <span class="pill" id="srv-state">connecté</span></h2>
+    <p class="sub" style="margin-top:0">Serveur <code>127.0.0.1</code> détecté : tu peux lancer un audit de parc directement. Choisis le mandat (déjà disponible), l'inventaire et le type. Le scan reste cadré par le mandat et ne sort pas de ta machine.</p>
+    <div class="controls">
+      <label class="fld">Mandat<select id="x-mandat"></select></label>
+      <label class="fld">Inventaire (chemin sous le projet)<input type="text" id="x-inv" value="outils/scan/parc-hosts.txt" size="26"></label>
+      <label class="fld">Type<select id="x-type"><option value="reseau">reseau</option><option value="web">web</option></select></label>
+      <label class="fld">IP source<input type="text" id="x-ip" value="" size="14"></label>
+      <button class="primary" id="x-run">▶ Lancer l'audit</button>
+    </div>
+    <div id="x-mandat-info" class="sub"></div>
+    <pre class="cmd" id="x-out" style="display:none;max-height:360px"></pre>
+  </section>
 </main>
 
 <script>
@@ -287,7 +301,43 @@ const DEMO = {
 };
 $("#demo").onclick=()=>{STATE={...DEMO};$("#howto").style.display="none";renderSynthese();renderFindings();renderThreat();renderJournal();};
 
-renderSynthese();renderFindings();renderThreat();renderJournal();renderCmd();
+// ---- mode serveur local (exécution) : actif si un jeton est dans l'URL ----
+const TOKEN = new URLSearchParams(location.search).get("t");
+async function api(path, body){
+  const opt = {headers:{"X-Tasko-Token":TOKEN}};
+  if(body){ opt.method="POST"; opt.headers["Content-Type"]="application/json"; opt.body=JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  return r.json();
+}
+async function initServeur(){
+  if(!TOKEN || location.protocol==="file:") return;         // page statique => rien
+  try{
+    const d = await api("/api/mandats");
+    const sel = $("#x-mandat"); sel.innerHTML="";
+    (d.mandats||[]).forEach(m=>{
+      const o=document.createElement("option"); o.value=m.fichier;
+      o.textContent=`${m.fichier} ${m.signe?"✓ signé":"✗ non signé"}`;
+      o.dataset.info=JSON.stringify(m); sel.appendChild(o);
+    });
+    const info=()=>{ const o=sel.selectedOptions[0]; if(!o)return;
+      const m=JSON.parse(o.dataset.info||"{}");
+      $("#x-mandat-info").innerHTML = m.erreur ? `<span style="color:var(--sev-elevee)">${esc(m.erreur)}</span>`
+        : `réf. <strong>${esc(m.reference||"?")}</strong> · ${m.signe?"signé":"NON signé (aucun scan ne partira)"} · tests&nbsp;: ${(m.tests||[]).join(", ")||"aucun"} · périmètre&nbsp;: ${[...(m.domaines||[]),...(m.ips||[])].join(", ")||"—"}`; };
+    sel.onchange=info; info();
+    $("#p-exec").style.display="";
+  }catch(e){ /* serveur non joignable : on reste en lecture seule */ }
+}
+$("#x-run").onclick=async()=>{
+  const out=$("#x-out"); out.style.display=""; out.textContent="Audit en cours… (chaque hôte est vérifié contre le mandat avant scan)";
+  const body={mandat:$("#x-mandat").value, inventaire:$("#x-inv").value, type:$("#x-type").value, ip_source:$("#x-ip").value};
+  try{
+    const r=await api("/api/audit",body);
+    out.textContent = r.erreur ? ("ERREUR : "+r.erreur) : (`[code ${r.code}]\n`+(r.sortie||"(pas de sortie)"));
+    // tente de recharger le dernier rapport produit (dossier dans la sortie)
+  }catch(e){ out.textContent="ERREUR réseau : "+e.message; }
+};
+
+renderSynthese();renderFindings();renderThreat();renderJournal();renderCmd();initServeur();
 </script>
 </body>
 </html>

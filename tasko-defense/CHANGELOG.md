@@ -64,7 +64,16 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
     scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
     automatisé à l'échelle — jamais d'exploitation.
 
-- **Tableau de bord web** `ui/tableau-de-bord.html` : interface de **lecture seule**
+- **Serveur web LOCAL** `tasko/serveur.py` (`tasko serveur`) : donne au tableau de
+  bord la capacité de **lancer** les audits (agilité), avec garde-fous stricts —
+  écoute **127.0.0.1 uniquement**, **jeton** exigé, **liste d'actions figée**
+  (lister les mandats, prévisualiser le verrou, lancer `audit-parc`, charger un
+  rapport), chemins **confinés** au projet (anti-traversée), outils invoqués par
+  liste d'arguments (jamais via un shell), hôte non local refusé. Chaque scan reste
+  cadré par le mandat ; **aucune exploitation, aucune commande arbitraire**. Le
+  tableau de bord active un panneau « Exécution » quand le jeton est présent.
+  18 assertions de test (sécurité + audit via stubs).
+- **Tableau de bord web** `ui/tableau-de-bord.html` : interface de **lecture**
   (100 % navigateur, aucun serveur, aucune exécution) pour visualiser les findings
   (synthèse par sévérité, table filtrable/triable — statut ordonné et toujours
   étiqueté), les IOC + payloads décodés du threat-intel, le journal (Annexe C) et

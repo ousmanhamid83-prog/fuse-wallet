@@ -298,6 +298,11 @@ def _cmd_preuve(args: argparse.Namespace) -> int:
     return CODE_OK
 
 
+def _cmd_serveur(args: argparse.Namespace) -> int:
+    from . import serveur as _serveur
+    return _serveur.servir(port=args.port)
+
+
 def construire_parseur() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tasko", description="Tasko Defense — outils cadrés par mandat")
     p.add_argument("--version", action="version", version=f"tasko {__version__}")
@@ -395,6 +400,10 @@ def construire_parseur() -> argparse.ArgumentParser:
     pe.add_argument("--texte", default=None, help="artefact fourni directement en argument")
     pe.add_argument("--sortie", default=None, help="fichier .md de sortie (sinon stdout)")
     pe.set_defaults(func=_cmd_preuve)
+
+    sv = sous.add_parser("serveur", help="tableau de bord web LOCAL (127.0.0.1) avec exécution cadrée par mandat")
+    sv.add_argument("--port", type=int, default=8787)
+    sv.set_defaults(func=_cmd_serveur)
     return p
 
 

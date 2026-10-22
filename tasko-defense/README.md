@@ -65,10 +65,14 @@ python3 -m tasko.cli purple --cible http://127.0.0.1:8080/ \
 # Analyser (décoder/désobfusquer) un artefact trouvé — défensif, hors ligne
 python3 -m tasko.cli preuve --fichier payload-trouve.txt --sortie analyse.md
 
-# Tableau de bord : exporter les findings en JSON, puis ouvrir l'interface
+# Tableau de bord (lecture seule) : exporter les findings puis ouvrir l'interface
 python3 -m tasko.cli rapport --dossier rapports/<date> --json findings.json
 #   ouvre ui/tableau-de-bord.html dans un navigateur et charge findings.json
-#   (+ le dossier threat-intel et le journal). Lecture seule, 100% local.
+
+# Serveur web LOCAL (agilité) : lancer les audits depuis l'interface, sous mandat
+python3 -m tasko.cli serveur            # écoute 127.0.0.1:8787, imprime l'URL + jeton
+#   ouvre l'URL affichée ; choisis le mandat, l'inventaire, le type, et lance.
+#   Localhost uniquement, jeton requis, actions figées, aucune exploitation.
 ```
 
 Portée éthique : `poc` ne fait que **sceller** des preuves que l'opérateur a
@@ -97,7 +101,8 @@ moteur d'exploitation automatisé : l'exploitation reste manuelle et documentée
 | `tasko/poc.py` | Documentation/scellement d'une PoC sous Annexe D (n'exécute rien) |
 | `tasko/purple.py` | Mode purple : sondes inertes pour valider la détection (honeypot/Wazuh) |
 | `tasko/preuve.py` | Analyseur de preuves : décode/désobfusque un artefact détenu (défensif) |
-| `ui/tableau-de-bord.html` | Tableau de bord web (lecture seule) : findings, IOC, journal, mandats |
+| `ui/tableau-de-bord.html` | Tableau de bord web : findings, IOC, journal, mandats |
+| `tasko/serveur.py` | Serveur web LOCAL (127.0.0.1) : exécution d'audits cadrée par mandat |
 | `mandats/` | Mandats lisibles par machine (gabarits non signés fournis) |
 | `mandat/mandat-audit-v2.md` | Mandat juridique (règles d'engagement) |
 | `outils/scan/scan-web.sh` | Audit web (Nuclei + WPScan), cadré par le mandat |
