@@ -204,6 +204,26 @@ Rappel (acté) : l'automatisation couvre la DÉCOUVERTE à l'échelle. L'exploit
 reste manuelle, ciblée, autorisée (Annexe D). Aucun moteur d'exploit. Suite : 7
 fichiers de tests, tous verts.
 
+## 2026-10-22 — Tableau de bord web (lecture/visualisation)
+
+Demande : une vraie interface graphique par-dessus les commandes. Livré une
+interface de **lecture seule**, sans surface d'exécution.
+
+- `ui/tableau-de-bord.html` : autonome (vanilla JS, aucune dépendance/CDN, clair+
+  sombre). Charge les JSON produits par Tasko (findings via `rapport --json`,
+  dossier threat-intel, journal JSONL) et visualise : synthèse par sévérité (tuiles
+  + barres), table de findings filtrable/triable, IOC + payloads décodés, Annexe C,
+  état du mandat. Sévérité = statut ordonné TOUJOURS étiqueté (badge lettre+libellé)
+  + vue table : jamais la couleur seule (règle dataviz pour les statuts). Palette
+  passée au validateur dataviz ; relief (labels/table) en place.
+- **Choix de sûreté** : pas de backend qui exécute des scans. Le panneau « audit de
+  parc » **compose** la commande (sous mandat, IP source) à copier dans le terminal ;
+  l'exécution reste sur l'infra de l'opérateur. Aucun moteur d'exploit, cohérent
+  avec tout le reste.
+- `tasko rapport --json` : export structuré consommé par le tableau de bord.
+  `rapport.vers_structure()` + test. Vérif : syntaxe JS (node --check) OK, structure
+  OK ; suite complète 7 fichiers verts. (Rendu navigateur auto indisponible ici.)
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

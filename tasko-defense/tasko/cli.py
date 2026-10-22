@@ -13,6 +13,7 @@ Sous-commandes :
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -145,13 +146,20 @@ def _cmd_rapport(args: argparse.Namespace) -> int:
         except MandatError:
             reference = ""
     findings = _rapport.collecter_dossier(args.dossier)
+    if args.json:
+        structure = _rapport.vers_structure(findings, reference_mandat=reference,
+                                            date=args.date or "", operateur=args.operateur or "")
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(structure, f, indent=2, ensure_ascii=False)
+        print(f"Findings JSON écrits : {args.json} ({len(findings)} finding(s)) "
+              f"— à charger dans le tableau de bord (ui/tableau-de-bord.html)")
     md = _rapport.rendre_markdown(findings, reference_mandat=reference,
                                   date=args.date or "", operateur=args.operateur or "")
     if args.sortie:
         with open(args.sortie, "w", encoding="utf-8") as f:
             f.write(md)
         print(f"Rapport écrit : {args.sortie} ({len(findings)} finding(s))")
-    else:
+    elif not args.json:
         sys.stdout.write(md)
     return CODE_OK
 
@@ -340,6 +348,8 @@ def construire_parseur() -> argparse.ArgumentParser:
     r.add_argument("--date", default=None)
     r.add_argument("--operateur", default=None)
     r.add_argument("--sortie", default=None, help="fichier .md de sortie (sinon stdout)")
+    r.add_argument("--json", metavar="FICHIER", default=None,
+                   help="écrit aussi les findings en JSON (pour le tableau de bord)")
     r.set_defaults(func=_cmd_rapport)
 
     pc = sous.add_parser("poc", help="documente et scelle une PoC sous Annexe D (n'exécute rien)")

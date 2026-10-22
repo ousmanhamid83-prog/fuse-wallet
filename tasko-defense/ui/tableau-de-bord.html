@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasko Defense — tableau de bord</title>
+<meta name="description" content="Lecture et visualisation des findings, IOC, journal (Annexe C) et mandats de Tasko Defense. 100% local, aucune exécution.">
+<style>
+  :root{
+    --bg:#f6f7f9; --surface:#ffffff; --surface2:#f0f2f5; --border:#d7dde5;
+    --ink:#1b2430; --muted:#5b6b7b; --faint:#8a99a8; --accent:#1f6feb;
+    --sev-critique:#c1121f; --sev-elevee:#e8590c; --sev-moyenne:#b8860b;
+    --sev-faible:#1971c2; --sev-info:#6b7785;
+    --ok:#1a7f45; --warn:#b8860b;
+  }
+  :root:not([data-theme="light"]) @media (prefers-color-scheme:dark){}
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#0e131a; --surface:#161d27; --surface2:#1d2631; --border:#2a3542;
+    --ink:#e6edf3; --muted:#9fb0c0; --faint:#6b7c8c; --accent:#5aa0ff;
+    --sev-critique:#ff6b6b; --sev-elevee:#ff954d; --sev-moyenne:#e0b84d;
+    --sev-faible:#5aa0ff; --sev-info:#93a3b3; --ok:#5ad19a; --warn:#e3b341;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0e131a; --surface:#161d27; --surface2:#1d2631; --border:#2a3542;
+    --ink:#e6edf3; --muted:#9fb0c0; --faint:#6b7c8c; --accent:#5aa0ff;
+    --sev-critique:#ff6b6b; --sev-elevee:#ff954d; --sev-moyenne:#e0b84d;
+    --sev-faible:#5aa0ff; --sev-info:#93a3b3; --ok:#5ad19a; --warn:#e3b341;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 16px}
+  h1{margin:0;font-size:1.25rem;display:flex;align-items:center;gap:10px}
+  .shield{color:var(--accent)}
+  .sub{color:var(--muted);font-size:.9rem;margin:2px 0 0}
+  main{max-width:1060px;margin:0 auto;padding:18px 16px 60px;display:grid;gap:20px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  button,.filebtn{font:inherit;border:1px solid var(--border);background:var(--surface);
+    color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+  button:hover,.filebtn:hover{border-color:var(--accent)}
+  .filebtn input{display:none}
+  .primary{background:var(--accent);color:#fff;border-color:transparent}
+  .note{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:8px;padding:10px 14px;color:var(--muted);font-size:.9rem}
+  section.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+  h2{margin:0 0 12px;font-size:1.05rem}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .tile{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface2)}
+  .tile .n{font-size:1.7rem;font-weight:700;line-height:1}
+  .tile .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.82rem;margin-top:6px}
+  .sevdot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+  .chart{display:grid;gap:8px;margin-top:4px}
+  .row{display:grid;grid-template-columns:120px 1fr 44px;align-items:center;gap:10px;font-size:.86rem}
+  .track{background:var(--surface2);border-radius:5px;height:16px;overflow:hidden;border:1px solid var(--border)}
+  .fill{height:100%;border-radius:5px 0 0 5px}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}
+  td.mono,code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82em;word-break:break-all}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;
+    font-size:.74rem;font-weight:600;color:#fff;white-space:nowrap}
+  .badge .ltr{font-weight:800;opacity:.9}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  input[type=text],select{font:inherit;padding:6px 9px;border:1px solid var(--border);
+    border-radius:8px;background:var(--surface);color:var(--ink)}
+  .empty{color:var(--faint);padding:18px;text-align:center}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.86rem}
+  .kv dt{color:var(--muted)}
+  pre.cmd{background:#0b0f14;color:#cfe3d6;border-radius:8px;padding:12px;overflow:auto;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;white-space:pre-wrap;word-break:break-all}
+  .pill{font-size:.74rem;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+  .right{margin-left:auto}
+  details{margin-top:6px}
+  summary{cursor:pointer;color:var(--accent);font-size:.82rem}
+  .tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);
+    border-radius:6px;padding:0 6px;margin:1px 2px;font-size:.76rem;font-family:ui-monospace,monospace}
+  label.fld{display:grid;gap:3px;font-size:.82rem;color:var(--muted)}
+  @media (max-width:620px){ .row{grid-template-columns:90px 1fr 40px} th.hide,td.hide{display:none} }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1><span class="shield">◆</span> Tasko Defense — tableau de bord</h1>
+  <p class="sub">Lecture &amp; visualisation des findings, IOC, journal (Annexe C) et mandats. 100&nbsp;% local, dans ton navigateur — aucune donnée envoyée, aucune commande exécutée.</p>
+</div></header>
+
+<main>
+  <div class="bar">
+    <label class="filebtn">Charger findings (rapport --json)<input type="file" id="f-find" accept=".json"></label>
+    <label class="filebtn">Charger dossier threat-intel (.json)<input type="file" id="f-dos" accept=".json"></label>
+    <label class="filebtn">Charger journal (.jsonl)<input type="file" id="f-jour" accept=".jsonl,.json,.txt"></label>
+    <button class="primary" id="demo">Charger un exemple</button>
+    <button id="theme" class="right" title="Thème clair/sombre">◐ thème</button>
+  </div>
+  <div class="note" id="howto">
+    Produis les données avec Tasko puis charge-les ici&nbsp;:
+    <code>tasko rapport --dossier rapports/&lt;date&gt; --json findings.json</code>.
+    Les sévérités sont un <strong>statut ordonné</strong> — chaque badge porte une lettre + un libellé
+    (jamais la couleur seule), et la table ci-dessous est la vue accessible.
+  </div>
+
+  <section class="panel" id="p-synthese">
+    <h2>Synthèse des findings</h2>
+    <div id="meta" class="kv" style="margin-bottom:12px"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="chart" id="chart" style="margin-top:14px"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Findings</h2>
+    <div class="controls">
+      <input type="text" id="q" placeholder="filtrer (titre, cible, référence…)">
+      <select id="fsev"><option value="">toutes sévérités</option></select>
+      <span class="pill right" id="fcount"></span>
+    </div>
+    <div id="findings"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Threat intelligence — IOC &amp; payloads décodés</h2>
+    <div id="threat"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Journal des tests (Annexe C)</h2>
+    <div id="journal"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Composer une commande d'audit de parc</h2>
+    <p class="sub" style="margin-top:0">Ce panneau <strong>ne lance rien</strong> : il assemble la commande exacte, cadrée par le mandat, que tu copies dans <em>ton</em> terminal, sur <em>ton</em> infra (jamais depuis ce navigateur).</p>
+    <div class="controls">
+      <label class="fld">Mandat (chemin)<input type="text" id="c-mandat" value="../mandats/auto-audit.mandat.yaml" size="30"></label>
+      <label class="fld">Inventaire<input type="text" id="c-inv" value="parc-hosts.txt" size="18"></label>
+      <label class="fld">Type<select id="c-type"><option value="reseau">reseau</option><option value="web">web</option></select></label>
+      <label class="fld">IP source (Art.3)<input type="text" id="c-ip" value="198.51.100.10" size="15"></label>
+    </div>
+    <pre class="cmd" id="cmd"></pre>
+    <button id="copy">Copier la commande</button>
+    <span class="pill" id="copied" style="display:none">copié ✓</span>
+    <div class="note" style="margin-top:12px">Rappel&nbsp;: chaque hôte est vérifié contre le mandat avant scan ; un hôte hors mandat est ignoré. L'audit <strong>trouve</strong> les failles — il n'exploite rien.</div>
+  </section>
+</main>
+
+<script>
+const SEV = {
+  "critique":{c:"var(--sev-critique)",l:"C",o:0},
+  "élevée":{c:"var(--sev-elevee)",l:"É",o:1},
+  "moyenne":{c:"var(--sev-moyenne)",l:"M",o:2},
+  "faible":{c:"var(--sev-faible)",l:"F",o:3},
+  "info":{c:"var(--sev-info)",l:"i",o:4},
+};
+const ORDER = Object.keys(SEV);
+let STATE = {find:null, dos:null, jour:null};
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function sevBadge(sev){
+  const m = SEV[sev] || SEV["info"];
+  return `<span class="badge" style="background:${m.c}"><span class="ltr">${m.l}</span>${esc(sev)}</span>`;
+}
+
+function renderSynthese(){
+  const d = STATE.find;
+  const meta = $("#meta"), tiles = $("#tiles"), chart = $("#chart");
+  if(!d){ tiles.innerHTML=""; chart.innerHTML=""; meta.innerHTML="<dt>état</dt><dd class='empty' style='text-align:left'>aucun rapport chargé</dd>"; return; }
+  meta.innerHTML = `<dt>Mandat</dt><dd>${esc(d.reference_mandat||"—")}</dd>`+
+    `<dt>Date</dt><dd>${esc(d.date||"—")}</dd>`+
+    `<dt>Opérateur</dt><dd>${esc(d.operateur||"—")}</dd>`+
+    `<dt>Total findings</dt><dd><strong>${d.total}</strong></dd>`;
+  const counts = d.comptes||{};
+  tiles.innerHTML = ORDER.map(s=>{
+    const n = counts[s]||0;
+    return `<div class="tile"><div class="n" style="color:${SEV[s].c}">${n}</div>
+      <div class="l"><span class="sevdot" style="background:${SEV[s].c}"></span>${esc(s)}</div></div>`;
+  }).join("");
+  const max = Math.max(1,...ORDER.map(s=>counts[s]||0));
+  chart.innerHTML = ORDER.map(s=>{
+    const n = counts[s]||0, w = Math.round((n/max)*100);
+    return `<div class="row"><div><span class="badge" style="background:${SEV[s].c}"><span class="ltr">${SEV[s].l}</span>${esc(s)}</span></div>
+      <div class="track"><div class="fill" style="width:${w}%;background:${SEV[s].c}"></div></div>
+      <div style="text-align:right;font-variant-numeric:tabular-nums">${n}</div></div>`;
+  }).join("");
+}
+
+let sortKey="severite", sortDir=1;
+function renderFindings(){
+  const host = $("#findings"); const d = STATE.find;
+  const selSev = $("#fsev");
+  if(selSev.children.length===1) ORDER.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;selSev.appendChild(o);});
+  if(!d || !d.findings || !d.findings.length){ host.innerHTML="<div class='empty'>aucun finding</div>"; $("#fcount").textContent=""; return; }
+  const q = $("#q").value.toLowerCase(), fs = selSev.value;
+  let rows = d.findings.filter(f=>{
+    if(fs && f.severite!==fs) return false;
+    if(!q) return true;
+    return [f.titre,f.cible,f.reference,f.outil,f.recommandation].join(" ").toLowerCase().includes(q);
+  });
+  rows.sort((a,b)=>{
+    let va,vb;
+    if(sortKey==="severite"){va=SEV[a.severite]?SEV[a.severite].o:9;vb=SEV[b.severite]?SEV[b.severite].o:9;}
+    else {va=(a[sortKey]||"").toLowerCase();vb=(b[sortKey]||"").toLowerCase();}
+    return (va<vb?-1:va>vb?1:0)*sortDir;
+  });
+  $("#fcount").textContent = rows.length+" / "+d.findings.length;
+  const th=(k,lbl,cls="")=>`<th class="${cls}" data-k="${k}">${lbl}${sortKey===k?(sortDir>0?" ▲":" ▼"):""}</th>`;
+  host.innerHTML = `<table><thead><tr>${th("severite","Sév.")}${th("titre","Titre")}${th("cible","Cible","hide")}${th("outil","Outil","hide")}${th("reference","Réf.","hide")}</tr></thead><tbody>`+
+    rows.map(f=>`<tr><td>${sevBadge(f.severite)}</td>
+      <td>${esc(f.titre)}${f.recommandation?`<details><summary>reco</summary>${esc(f.recommandation)}</details>`:""}${f.description?`<details><summary>détail</summary>${esc(f.description)}</details>`:""}</td>
+      <td class="mono hide">${esc(f.cible)}</td><td class="hide">${esc(f.outil)}</td><td class="mono hide">${esc(f.reference)}</td></tr>`).join("")+
+    `</tbody></table>`;
+  host.querySelectorAll("th").forEach(h=>h.onclick=()=>{const k=h.dataset.k; if(k===sortKey)sortDir*=-1; else{sortKey=k;sortDir=1;} renderFindings();});
+}
+
+function renderThreat(){
+  const host=$("#threat"); const d=STATE.dos;
+  if(!d || !(d.indicators||[]).length){ host.innerHTML="<div class='empty'>aucun dossier threat-intel chargé</div>"; return; }
+  const enr = d.enrichissement ? `<span class="pill">${d.enrichissement.en_ligne?"enrichi en ligne":"hors ligne"} — ${esc(d.enrichissement.raison||"")}</span>` : "";
+  host.innerHTML = `<p class="sub" style="margin-top:0">Source&nbsp;: <code>${esc((d.source&&d.source.abspath)||"?")}</code> ${enr}</p>`+
+    (d.indicators||[]).map(ind=>{
+      const sigs=(ind.attack_signatures||[]).map(s=>`<span class="tag">${esc(s)}</span>`).join(" ");
+      const dec=(ind.preuves_decodees||[]).map(p=>`<div style="margin:4px 0 0"><span class="pill">décodé</span> <code>${esc(p.revele||"")}</code>${(p.comportement_apparent||[]).length?` → ${(p.comportement_apparent).map(c=>`<span class="tag">${esc(c)}</span>`).join("")}`:""}</div>`).join("");
+      const rep=ind.reputation&&ind.reputation.abuse_score!=null?` · score abus ${esc(ind.reputation.abuse_score)}`:"";
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div><code><strong>${esc(ind.ip)}</strong></code> · ${ind.request_count} req · ${(ind.signature_count||0)} sig${rep}</div>
+        <div style="margin-top:4px">${sigs}</div>
+        <div class="sub">vu&nbsp;: ${esc(ind.first_seen||"?")} → ${esc(ind.last_seen||"?")}</div>
+        ${dec}</div>`;
+    }).join("");
+}
+
+function renderJournal(){
+  const host=$("#journal"); const j=STATE.jour;
+  if(!j || !j.length){ host.innerHTML="<div class='empty'>aucun journal chargé</div>"; return; }
+  host.innerHTML=`<table><thead><tr><th>Horodatage (UTC)</th><th>Réf.</th><th class="hide">Cible</th><th>Outil</th><th>Décision</th><th class="hide">Empreinte</th></tr></thead><tbody>`+
+    j.map(e=>`<tr><td class="mono">${esc(e.horodatage_utc||"")}</td><td>${esc(e.reference||"")}</td>
+      <td class="mono hide">${esc(e.cible||"")}</td><td>${esc(e.outil||"")}</td>
+      <td>${esc(e.decision||"")}</td><td class="mono hide">${esc((e.empreinte||"").slice(0,12))}</td></tr>`).join("")+
+    `</tbody></table>`;
+}
+
+function renderCmd(){
+  const m=$("#c-mandat").value||"<mandat.yaml>", inv=$("#c-inv").value||"<inventaire>",
+        t=$("#c-type").value, ip=$("#c-ip").value;
+  const extra = t==="web" ? '\nexport WPSCAN_API_TOKEN="ton_token"' : "";
+  $("#cmd").textContent =
+    `cd tasko-defense/outils/scan\nexport MANDAT=${m}`+(ip?`\nexport AUDIT_IP=${ip}`:"")+extra+
+    `\nbash audit-parc.sh ${inv} ${t}`;
+}
+
+// ---- chargement ----
+function loadFile(input, cb){ const f=input.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ cb(r.result); }catch(e){ alert("Fichier illisible : "+e.message); } }; r.readAsText(f); }
+$("#f-find").onchange=e=>loadFile(e.target,t=>{STATE.find=JSON.parse(t);renderSynthese();renderFindings();});
+$("#f-dos").onchange=e=>loadFile(e.target,t=>{STATE.dos=JSON.parse(t);renderThreat();});
+$("#f-jour").onchange=e=>loadFile(e.target,t=>{STATE.jour=t.split(/\r?\n/).filter(x=>x.trim()).map(x=>{try{return JSON.parse(x)}catch(_){return{horodatage_utc:"(ligne illisible)",outil:"",decision:""}}});renderJournal();});
+$("#q").oninput=renderFindings; $("#fsev").onchange=renderFindings;
+["#c-mandat","#c-inv","#c-type","#c-ip"].forEach(s=>$(s).addEventListener("input",renderCmd));
+$("#copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($("#cmd").textContent);const c=$("#copied");c.style.display="";setTimeout(()=>c.style.display="none",1500);};
+$("#theme").onclick=()=>{const r=document.documentElement;const cur=r.getAttribute("data-theme");r.setAttribute("data-theme",cur==="dark"?"light":"dark");};
+
+// ---- données de démonstration ----
+const DEMO = {
+  find:{reference_mandat:"TASKO-auto-audit",date:"2026-10-22",operateur:"analyste1",
+    severites:ORDER,total:6,
+    comptes:{"critique":1,"élevée":2,"moyenne":2,"faible":1,"info":0},
+    findings:[
+      {cible:"https://demo.local/login",outil:"nuclei",titre:"RCE non authentifiée",severite:"critique",reference:"CVE-2024-0001",description:"Exécution de code via paramètre non filtré.",recommandation:"Mettre à jour le composant ; filtrer l'entrée."},
+      {cible:"https://demo.local/login",outil:"wpscan",titre:"[WordPress] XSS stockée",severite:"élevée",reference:"CVE-2024-9999",description:"",recommandation:"Mettre à jour vers 6.5+."},
+      {cible:"https://demo.local/api",outil:"zap",titre:"Injection SQL possible",severite:"élevée",reference:"CWE-89",description:"",recommandation:"Requêtes paramétrées."},
+      {cible:"https://demo.local",outil:"nuclei",titre:"TLS 1.0 actif",severite:"moyenne",reference:"",description:"",recommandation:"Désactiver TLS<1.2."},
+      {cible:"10.0.0.12",outil:"nmap",titre:"Service SMB obsolète",severite:"moyenne",reference:"CVE-2017-0144",description:"",recommandation:"Mettre à jour / désactiver SMBv1."},
+      {cible:"https://demo.local",outil:"zap",titre:"En-tête de sécurité manquant",severite:"faible",reference:"CWE-693",description:"",recommandation:"Ajouter les en-têtes CSP/HSTS."}
+    ]},
+  dos:{source:{abspath:"/var/log/nginx/access.log"},enrichissement:{en_ligne:false,raison:"aucun --mandat : analyse locale"},
+    indicators:[
+      {ip:"45.9.20.7",request_count:38,signature_count:2,attack_signatures:["sql_injection","wp_login_bruteforce"],first_seen:"2026-10-20T11:00:00Z",last_seen:"2026-10-20T11:40:00Z",
+        preuves_decodees:[{revele:"id=1 UNION SELECT 1,2,3",comportement_apparent:["union select"]}],reputation:{abuse_score:92}},
+      {ip:"185.22.0.9",request_count:12,signature_count:1,attack_signatures:["code_injection_probe"],first_seen:"2026-10-20T12:03:00Z",last_seen:"2026-10-20T12:05:00Z",
+        preuves_decodees:[{revele:"<?php system($_GET['c']); // http://c2.evil.example/x",comportement_apparent:["system"]}],reputation:{abuse_score:60}}
+    ]},
+  jour:[
+    {horodatage_utc:"2026-10-22T01:12:03Z",reference:"TASKO-auto-audit",cible:"10.0.0.12",outil:"audit-parc",decision:"autorisé",empreinte:""},
+    {horodatage_utc:"2026-10-22T01:12:40Z",reference:"TASKO-auto-audit",cible:"10.0.0.12",outil:"nmap (vuln)",decision:"terminé",empreinte:"64707f847d69aa21"},
+    {horodatage_utc:"2026-10-22T01:13:05Z",reference:"TASKO-auto-audit",cible:"8.8.8.8",outil:"audit-parc",decision:"refusé",empreinte:""}
+  ]
+};
+$("#demo").onclick=()=>{STATE={...DEMO};$("#howto").style.display="none";renderSynthese();renderFindings();renderThreat();renderJournal();};
+
+renderSynthese();renderFindings();renderThreat();renderJournal();renderCmd();
+</script>
+</body>
+</html>

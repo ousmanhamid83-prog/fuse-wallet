@@ -105,6 +105,14 @@ def run() -> int:
     ok &= check("Aucune vulnérabilité" in R.rendre_markdown(R.collecter_dossier(vide)),
                 "rapport : dossier vide -> message explicite")
 
+    # export structuré (JSON) pour le tableau de bord
+    st = R.vers_structure(findings, reference_mandat="T-1", date="2026-10-22")
+    ok &= check(st["total"] == len(findings) and st["comptes"].get("critique") == 1
+                and st["severites"][0] == "critique" and "findings" in st,
+                "rapport : vers_structure (comptes + total + findings)")
+    ok &= check(all({"cible", "severite", "titre"} <= set(f) for f in st["findings"]),
+                "rapport : chaque finding JSON a cible/severite/titre")
+
     print("\nRÉSULTAT :", "TOUS LES TESTS PASSENT" if ok else "DES TESTS ÉCHOUENT")
     return 0 if ok else 1
 

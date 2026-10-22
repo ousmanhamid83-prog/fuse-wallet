@@ -64,6 +64,15 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
     scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
     automatisé à l'échelle — jamais d'exploitation.
 
+- **Tableau de bord web** `ui/tableau-de-bord.html` : interface de **lecture seule**
+  (100 % navigateur, aucun serveur, aucune exécution) pour visualiser les findings
+  (synthèse par sévérité, table filtrable/triable — statut ordonné et toujours
+  étiqueté), les IOC + payloads décodés du threat-intel, le journal (Annexe C) et
+  l'état des mandats. Un panneau **compose** la commande d'audit de parc (sous
+  mandat) à copier dans le terminal — il ne la lance pas. Données chargées via
+  `tasko rapport --json findings.json` (+ dossier threat-intel + journal JSONL).
+  Clair/sombre, sans dépendance externe. Palette de sévérité validée (dataviz).
+- `tasko rapport --json <fichier>` : export structuré des findings pour le tableau de bord.
 - **Aperçu des interfaces** : `docs/apercu-interfaces.html` — captures RÉELLES du
   terminal (aide, verrou, décodage de preuve, brouillon de PoC, rapport, purple,
   audit de parc). Tasko est un outil en ligne de commande, sans interface graphique.

@@ -226,6 +226,25 @@ def trier(findings: list[Finding]) -> list[Finding]:
 
 
 # ---------------------------------------------------------------- rendu
+def vers_structure(findings: list[Finding], *, reference_mandat: str = "",
+                   date: str = "", operateur: str = "") -> dict:
+    """Rapport sous forme structurée (dict JSON-sérialisable) pour le tableau de bord."""
+    findings = trier(findings)
+    comptes = {s: 0 for s in SEVERITES}
+    for f in findings:
+        comptes[f.severite] = comptes.get(f.severite, 0) + 1
+    return {
+        "genere_par": "tasko rapport",
+        "reference_mandat": reference_mandat,
+        "date": date,
+        "operateur": operateur,
+        "severites": list(SEVERITES),
+        "comptes": comptes,
+        "total": len(findings),
+        "findings": [dataclasses.asdict(f) for f in findings],
+    }
+
+
 def rendre_markdown(findings: list[Finding], *, reference_mandat: str = "",
                     date: str = "", operateur: str = "") -> str:
     findings = trier(findings)
