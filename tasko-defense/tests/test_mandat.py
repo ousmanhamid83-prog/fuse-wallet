@@ -15,6 +15,7 @@ from tasko.mandat import (  # noqa: E402
     Mandat,
     MandatError,
     autoriser,
+    etat_validite,
     extraire_hote,
 )
 
@@ -164,6 +165,18 @@ def run() -> int:
     ok &= check(d.autorise, "inventaire : IP du parc (10.1.2.3) autorisée")
     d = autoriser(minv, "8.8.8.8", "scan_reseau", moment=DANS)
     ok &= check(not d.autorise, "inventaire : IP hors parc (8.8.8.8) refusée")
+
+    # --- état de validité (alertes d'expiration) ---
+    ajd = dt.date(2026, 6, 15)
+    mm = mandat_base(valide_du="2026-01-01", valide_au="2026-12-31")
+    ok &= check(etat_validite(mm, ajd)["etat"] == "actif", "validité : mandat actif")
+    mm = mandat_base(valide_du="2026-01-01", valide_au="2026-06-20")
+    ok &= check(etat_validite(mm, ajd)["etat"] == "expire_bientot", "validité : expire bientôt (≤14j)")
+    mm = mandat_base(valide_du="2026-01-01", valide_au="2026-05-01")
+    ev = etat_validite(mm, ajd)
+    ok &= check(ev["etat"] == "expire" and ev["jours_restants"] < 0, "validité : expiré")
+    ok &= check(etat_validite(mandat_base(signe=False), ajd)["etat"] == "non_signe",
+                "validité : non signé")
 
     print("\nRÉSULTAT :", "TOUS LES TESTS PASSENT" if ok else "DES TESTS ÉCHOUENT")
     return 0 if ok else 1

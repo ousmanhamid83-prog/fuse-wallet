@@ -240,6 +240,27 @@ def _parse_fenetre(f: dict, origine: str) -> Fenetre:
 
 
 # ---------------------------------------------------------------- autorisation
+def etat_validite(m: "Mandat", aujourdhui: _dt.date | None = None,
+                  seuil_jours: int = 14) -> dict:
+    """État de validité d'un mandat : non_signe | futur | actif | expire_bientot | expire.
+
+    Sert aux alertes d'expiration (le mandat refuse déjà hors période ; ceci PRÉVIENT
+    avant). ``jours_restants`` est négatif si déjà expiré.
+    """
+    if not m.signe:
+        return {"etat": "non_signe", "jours_restants": None, "message": "non signé"}
+    j = aujourdhui or _dt.datetime.now(_dt.timezone.utc).date()
+    if j < m.valide_du:
+        return {"etat": "futur", "jours_restants": (m.valide_du - j).days,
+                "message": f"valide à partir du {m.valide_du}"}
+    if j > m.valide_au:
+        return {"etat": "expire", "jours_restants": (m.valide_au - j).days,
+                "message": f"expiré depuis le {m.valide_au}"}
+    reste = (m.valide_au - j).days
+    return {"etat": "expire_bientot" if reste <= seuil_jours else "actif",
+            "jours_restants": reste, "message": f"expire dans {reste} j (le {m.valide_au})"}
+
+
 def autoriser(
     mandat: Mandat,
     cible: str,

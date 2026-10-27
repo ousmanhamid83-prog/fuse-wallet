@@ -77,6 +77,14 @@
     border-radius:6px;padding:0 6px;margin:1px 2px;font-size:.76rem;font-family:ui-monospace,monospace}
   label.fld{display:grid;gap:3px;font-size:.82rem;color:var(--muted)}
   @media (max-width:620px){ .row{grid-template-columns:90px 1fr 40px} th.hide,td.hide{display:none} }
+  .diffgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+  .diffcol h3{margin:0 0 6px;font-size:.9rem}
+  .diffcol{border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--surface2)}
+  .diffcol ul{margin:6px 0 0;padding-left:16px;font-size:.82rem}
+  @media print{
+    header .bar,#howto,.filebtn,#demo,#print,#theme,#p-exec,#p-cmd button,.controls input,.controls select{display:none!important}
+    body{background:#fff;color:#000} section.panel{break-inside:avoid;border-color:#bbb}
+  }
 </style>
 </head>
 <body>
@@ -91,7 +99,8 @@
     <label class="filebtn">Charger dossier threat-intel (.json)<input type="file" id="f-dos" accept=".json"></label>
     <label class="filebtn">Charger journal (.jsonl)<input type="file" id="f-jour" accept=".jsonl,.json,.txt"></label>
     <button class="primary" id="demo">Charger un exemple</button>
-    <button id="theme" class="right" title="Thème clair/sombre">◐ thème</button>
+    <button id="print" class="right" title="Imprimer / exporter en PDF">⎙ PDF</button>
+    <button id="theme" title="Thème clair/sombre">◐ thème</button>
   </div>
   <div class="note" id="howto">
     Produis les données avec Tasko puis charge-les ici&nbsp;:
@@ -115,6 +124,21 @@
       <span class="pill right" id="fcount"></span>
     </div>
     <div id="findings"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Comparer deux audits (avant / après correction)</h2>
+    <p class="sub" style="margin-top:0">Charge deux exports <code>findings.json</code> pour voir ce qui a été corrigé, ce qui est nouveau, et ce qui persiste.</p>
+    <div class="controls">
+      <label class="filebtn">Audit AVANT<input type="file" id="d-avant" accept=".json"></label>
+      <label class="filebtn">Audit APRÈS<input type="file" id="d-apres" accept=".json"></label>
+    </div>
+    <div id="diff"><div class="empty">charge deux rapports pour comparer</div></div>
+  </section>
+
+  <section class="panel" id="p-hist" style="display:none">
+    <h2>Historique des audits (serveur local)</h2>
+    <div id="hist"></div>
   </section>
 
   <section class="panel">
@@ -272,6 +296,25 @@ $("#q").oninput=renderFindings; $("#fsev").onchange=renderFindings;
 ["#c-mandat","#c-inv","#c-type","#c-ip"].forEach(s=>$(s).addEventListener("input",renderCmd));
 $("#copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($("#cmd").textContent);const c=$("#copied");c.style.display="";setTimeout(()=>c.style.display="none",1500);};
 $("#theme").onclick=()=>{const r=document.documentElement;const cur=r.getAttribute("data-theme");r.setAttribute("data-theme",cur==="dark"?"light":"dark");};
+$("#print").onclick=()=>window.print();
+
+// ---- comparaison de deux audits (client) ----
+let DAVANT=null, DAPRES=null;
+const cle=f=>[f.cible,f.titre,f.reference,f.outil].join("¦");
+function renderDiff(){
+  const host=$("#diff");
+  if(!DAVANT||!DAPRES){ host.innerHTML="<div class='empty'>charge deux rapports pour comparer</div>"; return; }
+  const A=new Map((DAVANT.findings||DAVANT).map(f=>[cle(f),f]));
+  const B=new Map((DAPRES.findings||DAPRES).map(f=>[cle(f),f]));
+  const corr=[...A.keys()].filter(k=>!B.has(k)).map(k=>A.get(k));
+  const nouv=[...B.keys()].filter(k=>!A.has(k)).map(k=>B.get(k));
+  const pers=[...B.keys()].filter(k=>A.has(k)).map(k=>B.get(k));
+  const col=(t,arr)=>`<div class="diffcol"><h3>${t} — ${arr.length}</h3>`+
+    (arr.length?`<ul>`+arr.map(f=>`<li>${sevBadge(f.severite)} ${esc(f.titre)} <span class="sub">${esc(f.cible)}</span></li>`).join("")+`</ul>`:"<div class='sub'>aucun</div>")+`</div>`;
+  host.innerHTML=`<div class="diffgrid">${col("✅ Corrigés",corr)}${col("🆕 Nouveaux",nouv)}${col("➖ Persistants",pers)}</div>`;
+}
+$("#d-avant").onchange=e=>loadFile(e.target,t=>{DAVANT=JSON.parse(t);renderDiff();});
+$("#d-apres").onchange=e=>loadFile(e.target,t=>{DAPRES=JSON.parse(t);renderDiff();});
 
 // ---- données de démonstration ----
 const DEMO = {
@@ -321,10 +364,23 @@ async function initServeur(){
     });
     const info=()=>{ const o=sel.selectedOptions[0]; if(!o)return;
       const m=JSON.parse(o.dataset.info||"{}");
+      const v=m.validite||{};
+      const col=v.etat==="expire"?"var(--sev-critique)":v.etat==="expire_bientot"?"var(--sev-elevee)":"var(--muted)";
+      const vbadge=v.etat?` · <span style="color:${col}">validité : ${esc(v.message||v.etat)}</span>`:"";
       $("#x-mandat-info").innerHTML = m.erreur ? `<span style="color:var(--sev-elevee)">${esc(m.erreur)}</span>`
-        : `réf. <strong>${esc(m.reference||"?")}</strong> · ${m.signe?"signé":"NON signé (aucun scan ne partira)"} · tests&nbsp;: ${(m.tests||[]).join(", ")||"aucun"} · périmètre&nbsp;: ${[...(m.domaines||[]),...(m.ips||[])].join(", ")||"—"}`; };
+        : `réf. <strong>${esc(m.reference||"?")}</strong> · ${m.signe?"signé":"NON signé (aucun scan ne partira)"} · tests&nbsp;: ${(m.tests||[]).join(", ")||"aucun"} · périmètre&nbsp;: ${[...(m.domaines||[]),...(m.ips||[])].join(", ")||"—"}${vbadge}`; };
     sel.onchange=info; info();
     $("#p-exec").style.display="";
+    // historique en lecture seule
+    try{
+      const h=await api("/api/historique");
+      const groupes=[["audits_parc","Audits de parc"],["rapports_web","Rapports web"],["rapports_reseau","Rapports réseau"]];
+      const parts=groupes.filter(([k])=>(h[k]||[]).length).map(([k,t])=>
+        `<h3 style="font-size:.9rem;margin:8px 0 4px">${t}</h3><ul style="margin:0;padding-left:16px;font-size:.84rem">`+
+        h[k].map(i=>`<li><code>${esc(i.nom)}</code> <span class="sub">(${i.fichiers} fichiers)</span></li>`).join("")+`</ul>`);
+      $("#hist").innerHTML = parts.length?parts.join(""):"<div class='empty'>aucun audit enregistré</div>";
+      $("#p-hist").style.display="";
+    }catch(_){}
   }catch(e){ /* serveur non joignable : on reste en lecture seule */ }
 }
 $("#x-run").onclick=async()=>{

@@ -244,6 +244,25 @@ Tests `tests/test_serveur.py` (18 assertions) : jeton exigé, hôte local, trave
 refusée, liste blanche, verrou, et un audit réel via stubs (8.8.8.8 hors mandat
 ignoré). Suite complète : 8 fichiers, tous verts. JS du dashboard vérifié (node --check).
 
+## 2026-10-27 — Avancées défensives (aucune exposition)
+
+L'utilisateur a confirmé : ne JAMAIS exposer le serveur (reste 127.0.0.1). J'ai
+refusé l'ouverture au réseau et proposé le tunnel SSH ; puis construit les
+avancées défensives demandées :
+
+- **Comparaison de deux audits** : `rapport.diff_findings` + `tasko diff` + panneau
+  client dans le dashboard (corrigés/nouveaux/persistants) — sert la boucle
+  audit → corriger → re-scanner.
+- **Expiration des mandats** : `mandat.etat_validite` + `tasko mandats` (liste +
+  alerte) + affichage dans le dashboard. Prévient avant que le verrou ne refuse.
+- **Historique** : `/api/historique` (lecture seule) + panneau serveur.
+- **Export PDF** (impression) + **tunnel SSH documenté** (accès distant sans
+  exposition : le serveur reste en 127.0.0.1).
+
+Tests ajoutés : etat_validite (actif/bientôt/expiré/non signé), diff_findings,
+/api/historique + validité. Suite complète : 8 fichiers, tous verts ; JS vérifié.
+Rappel tenu : aucune exposition réseau, aucun moteur d'exploit.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

@@ -18,7 +18,7 @@ import os
 import sys
 
 from . import __version__
-from .mandat import TYPES_TEST, Mandat, MandatError, autoriser
+from .mandat import TYPES_TEST, Mandat, MandatError, autoriser, etat_validite
 from . import journal as _journal
 from . import rapport as _rapport
 from . import poc as _poc
@@ -298,6 +298,56 @@ def _cmd_preuve(args: argparse.Namespace) -> int:
     return CODE_OK
 
 
+def _cmd_mandats(args: argparse.Namespace) -> int:
+    dossier = args.dossier or os.path.join(_RACINE, "mandats")
+    if not os.path.isdir(dossier):
+        print(f"ERREUR : dossier introuvable : {dossier}", file=sys.stderr)
+        return CODE_ERREUR
+    fichiers = sorted(f for f in os.listdir(dossier) if f.endswith((".yaml", ".yml")))
+    if not fichiers:
+        print("Aucun mandat dans", dossier)
+        return CODE_OK
+    print(f"{'Fichier':<34} {'Signé':<6} {'Validité':<28} Référence")
+    print("-" * 90)
+    alertes = 0
+    for nom in fichiers:
+        try:
+            m = Mandat.charger(os.path.join(dossier, nom))
+            ev = etat_validite(m)
+            if ev["etat"] in ("expire", "expire_bientot"):
+                alertes += 1
+            print(f"{nom:<34} {'oui' if m.signe else 'non':<6} "
+                  f"{ev['etat'] + ' (' + ev['message'] + ')':<28} {m.reference}")
+        except MandatError as e:
+            print(f"{nom:<34} {'?':<6} {'illisible':<28} {e}")
+    if alertes:
+        print(f"\n⚠ {alertes} mandat(s) expiré(s) ou proche(s) de l'expiration.")
+    return CODE_OK
+
+
+def _cmd_diff(args: argparse.Namespace) -> int:
+    def charger(chemin):
+        with open(chemin, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("findings", data) if isinstance(data, dict) else data
+    try:
+        avant, apres = charger(args.avant), charger(args.apres)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"ERREUR : lecture JSON ({e})", file=sys.stderr)
+        return CODE_ERREUR
+    d = _rapport.diff_findings(avant, apres)
+    md = _rapport.rendre_diff_markdown(d)
+    if args.sortie:
+        with open(args.sortie, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"Diff écrit : {args.sortie} "
+              f"(corrigés {d['comptes']['corriges']}, nouveaux {d['comptes']['nouveaux']}, "
+              f"persistants {d['comptes']['persistants']})")
+    else:
+        sys.stdout.write(md)
+    return CODE_OK
+
+
 def _cmd_serveur(args: argparse.Namespace) -> int:
     from . import serveur as _serveur
     return _serveur.servir(port=args.port)
@@ -404,6 +454,16 @@ def construire_parseur() -> argparse.ArgumentParser:
     sv = sous.add_parser("serveur", help="tableau de bord web LOCAL (127.0.0.1) avec exécution cadrée par mandat")
     sv.add_argument("--port", type=int, default=8787)
     sv.set_defaults(func=_cmd_serveur)
+
+    md = sous.add_parser("mandats", help="liste les mandats et leur état d'expiration")
+    md.add_argument("--dossier", default=None, help="dossier des mandats (déf. mandats/)")
+    md.set_defaults(func=_cmd_mandats)
+
+    df = sous.add_parser("diff", help="compare deux rapports (findings JSON) : corrigés/nouveaux/persistants")
+    df.add_argument("--avant", required=True, help="findings JSON de l'audit précédent")
+    df.add_argument("--apres", required=True, help="findings JSON de l'audit récent")
+    df.add_argument("--sortie", default=None, help="fichier .md de sortie (sinon stdout)")
+    df.set_defaults(func=_cmd_diff)
     return p
 
 

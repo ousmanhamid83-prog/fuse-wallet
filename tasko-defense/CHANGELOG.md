@@ -64,6 +64,16 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
     scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
     automatisé à l'échelle — jamais d'exploitation.
 
+- **Comparaison de deux audits** : `tasko diff --avant a.json --apres b.json`
+  (corrigés / nouveaux / persistants) + `rapport.diff_findings` ; panneau
+  « Comparer deux audits » dans le tableau de bord (client).
+- **Alertes d'expiration des mandats** : `mandat.etat_validite` (non_signe / futur /
+  actif / expire_bientot / expire) ; commande `tasko mandats` (liste + expiration) ;
+  état affiché dans le tableau de bord (serveur).
+- **Historique** (serveur) : `/api/historique` liste en lecture seule les audits et
+  rapports déjà produits ; panneau dédié dans le tableau de bord.
+- **Export PDF** : bouton « ⎙ PDF » (impression) + feuille de style `@media print`.
+- **Accès distant sûr documenté** : tunnel SSH (le serveur reste `127.0.0.1`).
 - **Serveur web LOCAL** `tasko/serveur.py` (`tasko serveur`) : donne au tableau de
   bord la capacité de **lancer** les audits (agilité), avec garde-fous stricts —
   écoute **127.0.0.1 uniquement**, **jeton** exigé, **liste d'actions figée**

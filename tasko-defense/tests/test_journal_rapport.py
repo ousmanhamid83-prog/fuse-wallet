@@ -113,6 +113,17 @@ def run() -> int:
     ok &= check(all({"cible", "severite", "titre"} <= set(f) for f in st["findings"]),
                 "rapport : chaque finding JSON a cible/severite/titre")
 
+    # diff de findings (avant/après correction)
+    avant = [{"cible": "x", "titre": "SQLi", "reference": "CVE-1", "outil": "nuclei"},
+             {"cible": "x", "titre": "TLS", "reference": "", "outil": "nuclei"}]
+    apres = [{"cible": "x", "titre": "TLS", "reference": "", "outil": "nuclei"},
+             {"cible": "x", "titre": "XSS", "reference": "CVE-2", "outil": "zap"}]
+    dd = R.diff_findings(avant, apres)
+    ok &= check(dd["comptes"] == {"corriges": 1, "nouveaux": 1, "persistants": 1},
+                "diff : 1 corrigé / 1 nouveau / 1 persistant")
+    ok &= check(dd["corriges"][0]["titre"] == "SQLi" and dd["nouveaux"][0]["titre"] == "XSS",
+                "diff : bons findings classés")
+
     print("\nRÉSULTAT :", "TOUS LES TESTS PASSENT" if ok else "DES TESTS ÉCHOUENT")
     return 0 if ok else 1
 

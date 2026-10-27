@@ -73,6 +73,18 @@ python3 -m tasko.cli rapport --dossier rapports/<date> --json findings.json
 python3 -m tasko.cli serveur            # écoute 127.0.0.1:8787, imprime l'URL + jeton
 #   ouvre l'URL affichée ; choisis le mandat, l'inventaire, le type, et lance.
 #   Localhost uniquement, jeton requis, actions figées, aucune exploitation.
+
+# État des mandats (alertes d'expiration) et comparaison de deux audits
+python3 -m tasko.cli mandats                                   # liste + expiration
+python3 -m tasko.cli diff --avant avant.json --apres apres.json  # corrigés/nouveaux/persistants
+```
+
+**Accès à distance au serveur local, en sécurité (tunnel SSH)** — le serveur reste
+sur `127.0.0.1`, jamais exposé ; SSH apporte le chiffrement et l'authentification :
+
+```bash
+ssh -L 8787:127.0.0.1:8787 ton-user@ton-noeud-audit
+# puis ouvre http://127.0.0.1:8787/?t=<jeton> dans TON navigateur
 ```
 
 Portée éthique : `poc` ne fait que **sceller** des preuves que l'opérateur a

@@ -29,10 +29,10 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
-    from .mandat import Mandat, MandatError, autoriser, TYPES_TEST
+    from .mandat import Mandat, MandatError, autoriser, etat_validite, TYPES_TEST
 except ImportError:  # exécution directe
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from tasko.mandat import Mandat, MandatError, autoriser, TYPES_TEST
+    from tasko.mandat import Mandat, MandatError, autoriser, etat_validite, TYPES_TEST
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../tasko-defense
 MANDATS_DIR = os.path.join(BASE, "mandats")
@@ -69,10 +69,12 @@ def action_mandats() -> dict:
             continue
         try:
             m = Mandat.charger(os.path.join(MANDATS_DIR, nom))
+            ev = etat_validite(m)
             out.append({
                 "fichier": nom, "reference": m.reference, "signe": m.signe,
                 "domaines": m.domaines, "ips": m.ips, "heberge_dedie": m.heberge_dedie,
                 "tests": [t for t in TYPES_TEST if m.tests_autorises.get(t)],
+                "validite": ev,
             })
         except MandatError as e:
             out.append({"fichier": nom, "erreur": str(e)})
@@ -148,11 +150,30 @@ def action_rapport(corps: dict) -> dict:
     return _rapport.vers_structure(findings)
 
 
+def action_historique(corps: dict) -> dict:
+    """Liste, en lecture seule, les audits et rapports déjà produits."""
+    def lister(sous):
+        base = os.path.join(BASE, sous)
+        if not os.path.isdir(base):
+            return []
+        items = []
+        for nom in sorted(os.listdir(base), reverse=True):
+            p = os.path.join(base, nom)
+            if os.path.isdir(p):
+                items.append({"nom": nom, "chemin": os.path.join(sous, nom),
+                              "fichiers": len(os.listdir(p))})
+        return items[:50]
+    return {"audits_parc": lister("outils/scan/audits-parc"),
+            "rapports_web": lister("outils/scan/rapports"),
+            "rapports_reseau": lister("outils/scan/rapports-reseau")}
+
+
 ACTIONS = {
     "mandats": lambda corps: action_mandats(),
     "verifier": action_verifier,
     "audit": action_audit,
     "rapport": action_rapport,
+    "historique": lambda corps: action_historique(corps),
 }
 
 
@@ -193,10 +214,11 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if chemin == "/api/mandats":
+        if chemin in ("/api/mandats", "/api/historique"):
             if not self._token_ok():
                 return self._json({"erreur": "jeton invalide"}, 403)
-            return self._json(action_mandats())
+            return self._json(action_mandats() if chemin.endswith("mandats")
+                              else action_historique({}))
         self._json({"erreur": "introuvable"}, 404)
 
     def do_POST(self):

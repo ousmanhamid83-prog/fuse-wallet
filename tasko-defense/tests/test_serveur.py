@@ -77,6 +77,11 @@ def run() -> int:
         code, d = http("GET", base + f"/api/mandats?t={S.TOKEN}")
         noms = [m.get("fichier") for m in d.get("mandats", [])]
         ok &= check(code == 200 and "exemple.mandat.yaml" in noms, "API mandats listés")
+        ok &= check(all("validite" in m for m in d.get("mandats", []) if "erreur" not in m),
+                    "API mandats : état de validité présent")
+        # historique (lecture seule)
+        code, h = http("GET", base + f"/api/historique?t={S.TOKEN}")
+        ok &= check(code == 200 and "audits_parc" in h, "API historique accessible")
         # hôte non local refusé
         code, _ = http("GET", base + f"/api/mandats?t={S.TOKEN}", host="evil.example")
         ok &= check(code == 403, "hôte non local => 403")

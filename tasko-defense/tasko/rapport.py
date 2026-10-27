@@ -226,6 +226,47 @@ def trier(findings: list[Finding]) -> list[Finding]:
 
 
 # ---------------------------------------------------------------- rendu
+def _cle_find(f: dict) -> tuple:
+    return (f.get("cible", ""), f.get("titre", ""), f.get("reference", ""), f.get("outil", ""))
+
+
+def diff_findings(avant: list[dict], apres: list[dict]) -> dict:
+    """Compare deux listes de findings (ex. avant/après correction).
+
+    Renvoie corrigés (présents avant, absents après), nouveaux (apparus après) et
+    persistants (toujours là). Utile pour la boucle audit → corriger → re-scanner.
+    """
+    a = {_cle_find(f): f for f in (avant or [])}
+    b = {_cle_find(f): f for f in (apres or [])}
+    corriges = [a[k] for k in a if k not in b]
+    nouveaux = [b[k] for k in b if k not in a]
+    persistants = [b[k] for k in b if k in a]
+    return {
+        "corriges": corriges, "nouveaux": nouveaux, "persistants": persistants,
+        "comptes": {"corriges": len(corriges), "nouveaux": len(nouveaux),
+                    "persistants": len(persistants)},
+    }
+
+
+def rendre_diff_markdown(d: dict) -> str:
+    c = d["comptes"]
+    L = ["# Comparaison de deux audits", "",
+         f"- **Corrigés** : {c['corriges']}  ",
+         f"- **Nouveaux** : {c['nouveaux']}  ",
+         f"- **Persistants** : {c['persistants']}", ""]
+    for cle, titre in (("corriges", "✅ Corrigés"), ("nouveaux", "🆕 Nouveaux"),
+                       ("persistants", "➖ Persistants")):
+        if d[cle]:
+            L.append(f"## {titre}")
+            for f in trier([Finding(**{k: f.get(k, "") for k in
+                            ("cible", "outil", "titre", "severite", "reference",
+                             "description", "recommandation")}) for f in d[cle]]):
+                L.append(f"- [{f.severite}] {f.titre} — {f.cible}"
+                         + (f" ({f.reference})" if f.reference else ""))
+            L.append("")
+    return "\n".join(L) + "\n"
+
+
 def vers_structure(findings: list[Finding], *, reference_mandat: str = "",
                    date: str = "", operateur: str = "") -> dict:
     """Rapport sous forme structurée (dict JSON-sérialisable) pour le tableau de bord."""
