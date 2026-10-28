@@ -121,9 +121,20 @@
     <div class="controls">
       <input type="text" id="q" placeholder="filtrer (titre, cible, référence…)">
       <select id="fsev"><option value="">toutes sévérités</option></select>
+      <select id="foutil"><option value="">tous outils</option></select>
       <span class="pill right" id="fcount"></span>
     </div>
     <div id="findings"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Tendance des sévérités dans le temps</h2>
+    <p class="sub" style="margin-top:0">Charge plusieurs exports <code>findings.json</code> (chacun daté) pour suivre l'évolution — idéal pour montrer la réduction du risque après corrections.</p>
+    <div class="controls">
+      <label class="filebtn">Ajouter des rapports datés<input type="file" id="t-files" accept=".json" multiple></label>
+      <button id="t-clear">vider</button>
+    </div>
+    <div id="trend"><div class="empty">charge au moins deux rapports datés</div></div>
   </section>
 
   <section class="panel">
@@ -174,7 +185,17 @@
       <label class="fld">Inventaire (chemin sous le projet)<input type="text" id="x-inv" value="outils/scan/parc-hosts.txt" size="26"></label>
       <label class="fld">Type<select id="x-type"><option value="reseau">reseau</option><option value="web">web</option></select></label>
       <label class="fld">IP source<input type="text" id="x-ip" value="" size="14"></label>
+      <label class="fld">Débit max (req/s)<input type="number" id="x-rate" value="30" min="1" max="1000" size="6"></label>
+      <label class="fld">Pause (s)<input type="number" id="x-pause" value="2" min="0" max="60" size="5"></label>
       <button class="primary" id="x-run">▶ Lancer l'audit</button>
+    </div>
+    <div class="controls" id="x-sev-wrap" style="font-size:.84rem">
+      <span class="sub">Sévérités Nuclei (web)&nbsp;:</span>
+      <label><input type="checkbox" class="x-sev" value="low" checked> low</label>
+      <label><input type="checkbox" class="x-sev" value="medium" checked> medium</label>
+      <label><input type="checkbox" class="x-sev" value="high" checked> high</label>
+      <label><input type="checkbox" class="x-sev" value="critical" checked> critical</label>
+      <span class="sub">· les tags dangereux (dos/intrusive) restent exclus.</span>
     </div>
     <div id="x-mandat-info" class="sub"></div>
     <pre class="cmd" id="x-out" style="display:none;max-height:360px"></pre>
@@ -225,12 +246,16 @@ function renderSynthese(){
 let sortKey="severite", sortDir=1;
 function renderFindings(){
   const host = $("#findings"); const d = STATE.find;
-  const selSev = $("#fsev");
+  const selSev = $("#fsev"), selOut = $("#foutil");
   if(selSev.children.length===1) ORDER.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;selSev.appendChild(o);});
   if(!d || !d.findings || !d.findings.length){ host.innerHTML="<div class='empty'>aucun finding</div>"; $("#fcount").textContent=""; return; }
-  const q = $("#q").value.toLowerCase(), fs = selSev.value;
+  const outils=[...new Set(d.findings.map(f=>f.outil).filter(Boolean))].sort();
+  const cur=selOut.value;
+  selOut.innerHTML='<option value="">tous outils</option>'+outils.map(o=>`<option${o===cur?" selected":""}>${esc(o)}</option>`).join("");
+  const q = $("#q").value.toLowerCase(), fs = selSev.value, fo = selOut.value;
   let rows = d.findings.filter(f=>{
     if(fs && f.severite!==fs) return false;
+    if(fo && f.outil!==fo) return false;
     if(!q) return true;
     return [f.titre,f.cible,f.reference,f.outil,f.recommandation].join(" ").toLowerCase().includes(q);
   });
@@ -292,7 +317,7 @@ function loadFile(input, cb){ const f=input.files[0]; if(!f) return; const r=new
 $("#f-find").onchange=e=>loadFile(e.target,t=>{STATE.find=JSON.parse(t);renderSynthese();renderFindings();});
 $("#f-dos").onchange=e=>loadFile(e.target,t=>{STATE.dos=JSON.parse(t);renderThreat();});
 $("#f-jour").onchange=e=>loadFile(e.target,t=>{STATE.jour=t.split(/\r?\n/).filter(x=>x.trim()).map(x=>{try{return JSON.parse(x)}catch(_){return{horodatage_utc:"(ligne illisible)",outil:"",decision:""}}});renderJournal();});
-$("#q").oninput=renderFindings; $("#fsev").onchange=renderFindings;
+$("#q").oninput=renderFindings; $("#fsev").onchange=renderFindings; $("#foutil").onchange=renderFindings;
 ["#c-mandat","#c-inv","#c-type","#c-ip"].forEach(s=>$(s).addEventListener("input",renderCmd));
 $("#copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($("#cmd").textContent);const c=$("#copied");c.style.display="";setTimeout(()=>c.style.display="none",1500);};
 $("#theme").onclick=()=>{const r=document.documentElement;const cur=r.getAttribute("data-theme");r.setAttribute("data-theme",cur==="dark"?"light":"dark");};
@@ -315,6 +340,40 @@ function renderDiff(){
 }
 $("#d-avant").onchange=e=>loadFile(e.target,t=>{DAVANT=JSON.parse(t);renderDiff();});
 $("#d-apres").onchange=e=>loadFile(e.target,t=>{DAPRES=JSON.parse(t);renderDiff();});
+
+// ---- tendance des sévérités dans le temps (SVG) ----
+let TREND=[];
+function renderTrend(){
+  const host=$("#trend");
+  if(TREND.length<2){ host.innerHTML="<div class='empty'>charge au moins deux rapports datés</div>"; return; }
+  const pts=[...TREND].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const maxY=Math.max(1,...pts.flatMap(p=>ORDER.map(s=>(p.comptes||{})[s]||0)));
+  const W=680,H=220,PL=34,PR=12,PT=12,PB=30, iw=W-PL-PR, ih=H-PT-PB;
+  const x=i=>PL+(pts.length===1?iw/2:i*iw/(pts.length-1));
+  const y=v=>PT+ih-(v/maxY)*ih;
+  const grid=[0,.25,.5,.75,1].map(f=>{const yy=PT+ih-f*ih;const v=Math.round(maxY*f);
+    return `<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="var(--border)" stroke-width="1"/>`+
+           `<text x="${PL-6}" y="${yy+3}" text-anchor="end" font-size="9" fill="var(--faint)">${v}</text>`;}).join("");
+  const xlab=pts.map((p,i)=>`<text x="${x(i)}" y="${H-10}" text-anchor="middle" font-size="9" fill="var(--faint)">${esc(String(p.date).slice(0,10))}</text>`).join("");
+  const lines=ORDER.map(s=>{
+    const d=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y((p.comptes||{})[s]||0).toFixed(1)}`).join(" ");
+    const dots=pts.map((p,i)=>{const v=(p.comptes||{})[s]||0;return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="${SEV[s].c}"><title>${esc(s)} @ ${esc(String(p.date))} : ${v}</title></circle>`;}).join("");
+    return `<path d="${d}" fill="none" stroke="${SEV[s].c}" stroke-width="2"/>${dots}`;
+  }).join("");
+  const legend=ORDER.map(s=>`<span class="badge" style="background:${SEV[s].c}"><span class="ltr">${SEV[s].l}</span>${esc(s)}</span>`).join(" ");
+  const table=`<table style="margin-top:10px"><thead><tr><th>Date</th>${ORDER.map(s=>`<th>${s}</th>`).join("")}</tr></thead><tbody>`+
+    pts.map(p=>`<tr><td class="mono">${esc(String(p.date))}</td>${ORDER.map(s=>`<td>${(p.comptes||{})[s]||0}</td>`).join("")}</tr>`).join("")+`</tbody></table>`;
+  host.innerHTML=`<div style="margin-bottom:6px">${legend}</div>`+
+    `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="tendance des sévérités">${grid}${lines}${xlab}</svg>`+table;
+}
+$("#t-files").onchange=e=>{
+  const files=[...e.target.files];
+  let pending=files.length;
+  files.forEach(f=>{const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);
+    TREND.push({date:d.date||f.name,comptes:d.comptes||{}});}catch(_){ }
+    if(--pending===0) renderTrend();};r.readAsText(f);});
+};
+$("#t-clear").onclick=()=>{TREND=[];renderTrend();};
 
 // ---- données de démonstration ----
 const DEMO = {
@@ -385,7 +444,9 @@ async function initServeur(){
 }
 $("#x-run").onclick=async()=>{
   const out=$("#x-out"); out.style.display=""; out.textContent="Audit en cours… (chaque hôte est vérifié contre le mandat avant scan)";
-  const body={mandat:$("#x-mandat").value, inventaire:$("#x-inv").value, type:$("#x-type").value, ip_source:$("#x-ip").value};
+  const sevs=[...document.querySelectorAll(".x-sev:checked")].map(c=>c.value);
+  const body={mandat:$("#x-mandat").value, inventaire:$("#x-inv").value, type:$("#x-type").value,
+    ip_source:$("#x-ip").value, rate_limit:$("#x-rate").value, pause:$("#x-pause").value, nuclei_severites:sevs};
   try{
     const r=await api("/api/audit",body);
     out.textContent = r.erreur ? ("ERREUR : "+r.erreur) : (`[code ${r.code}]\n`+(r.sortie||"(pas de sortie)"));

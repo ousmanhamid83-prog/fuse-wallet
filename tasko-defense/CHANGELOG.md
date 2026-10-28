@@ -64,6 +64,13 @@ relevés par l'audit de la v2 (73 constats). Développement tracé dans `JOURNAL
     scanné), avec pause/rate-limit, rapports agrégés + Annexe C. Audit (on TROUVE)
     automatisé à l'échelle — jamais d'exploitation.
 
+- **Tableau de bord — filtres, tendance, options de scan** : filtre des findings par
+  **outil** (en plus de la sévérité et de la recherche) ; panneau **tendance des
+  sévérités dans le temps** (charge plusieurs `findings.json` datés → graphe SVG
+  accessible, légende + table) ; **options de scan sûres** dans le panneau
+  d'exécution (débit req/s, pause, sévérités Nuclei en cases à cocher). Les options
+  sont validées côté serveur et ne peuvent pas réactiver les tags dangereux
+  (`dos/intrusive` restent exclus en dur ; `NUCLEI_SEVERITES` filtré par liste blanche).
 - **Comparaison de deux audits** : `tasko diff --avant a.json --apres b.json`
   (corrigés / nouveaux / persistants) + `rapport.diff_findings` ; panneau
   « Comparer deux audits » dans le tableau de bord (client).

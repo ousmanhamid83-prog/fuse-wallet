@@ -34,6 +34,14 @@ OUT="$PWD/rapports/$DATE"
 RATE_LIMIT="${RATE_LIMIT:-30}"     # requêtes/seconde max
 THROTTLE_MS="${THROTTLE_MS:-500}"  # pause entre requêtes WPScan
 
+# Sévérités Nuclei (option sûre) : validées contre une liste blanche. Toute valeur
+# non conforme retombe sur le défaut. Les tags dangereux restent exclus plus bas.
+NUCLEI_SEVERITES="${NUCLEI_SEVERITES:-low,medium,high,critical}"
+if ! printf '%s' "$NUCLEI_SEVERITES" | grep -qE '^(low|medium|high|critical)(,(low|medium|high|critical))*$'; then
+  echo "  [avertissement] NUCLEI_SEVERITES invalide -> défaut low,medium,high,critical"
+  NUCLEI_SEVERITES="low,medium,high,critical"
+fi
+
 die() { echo "ERREUR : $*" >&2; exit 1; }
 
 [ -n "$MANDAT" ] || die "variable MANDAT non définie (chemin d'un mandat signé)."
@@ -97,7 +105,7 @@ echo "--- Étape 1 : Nuclei ---"
 nuclei -update-templates -silent 2>/dev/null || true
 NRC=0
 nuclei -l "$AUTORISEES" \
-       -severity low,medium,high,critical \
+       -severity "$NUCLEI_SEVERITES" \
        -exclude-tags dos,fuzz,intrusive,brute-force \
        -rate-limit "$RATE_LIMIT" \
        -timeout 20 \

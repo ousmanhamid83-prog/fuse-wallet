@@ -129,6 +129,15 @@ def run() -> int:
                            body={"mandat": "_demo-serveur.mandat.yaml",
                                  "inventaire": "/etc/hosts", "type": "reseau"})
             ok &= check("erreur" in d, "audit : inventaire hors projet refusé")
+            # options de scan invalides refusées AVANT tout scan
+            code, d = http("POST", base + f"/api/audit?t={S.TOKEN}", token=S.TOKEN,
+                           body={"mandat": "_demo-serveur.mandat.yaml", "inventaire": inv,
+                                 "type": "reseau", "nuclei_severites": ["bidon"]})
+            ok &= check("erreur" in d and "sévérités" in d["erreur"], "audit : sévérités Nuclei invalides refusées")
+            code, d = http("POST", base + f"/api/audit?t={S.TOKEN}", token=S.TOKEN,
+                           body={"mandat": "_demo-serveur.mandat.yaml", "inventaire": inv,
+                                 "type": "reseau", "rate_limit": 99999})
+            ok &= check("erreur" in d and "rate_limit" in d["erreur"], "audit : rate_limit hors bornes refusé")
         finally:
             for pth in (mloc, inv):
                 try: os.remove(pth)

@@ -263,6 +263,22 @@ Tests ajoutés : etat_validite (actif/bientôt/expiré/non signé), diff_finding
 /api/historique + validité. Suite complète : 8 fichiers, tous verts ; JS vérifié.
 Rappel tenu : aucune exposition réseau, aucun moteur d'exploit.
 
+## 2026-10-28 — Filtres, tendance, options de scan sûres (UI + back)
+
+Trois avancées défensives demandées, sans exposition :
+- **Filtre par outil** dans la table des findings (+ sévérité + recherche déjà là).
+- **Tendance des sévérités** : charge plusieurs `findings.json` datés → graphe SVG
+  (une ligne par sévérité, couleurs de statut, légende + table accessible, info-bulle
+  <title> par point). Montre la réduction du risque après corrections.
+- **Options de scan sûres** (débit, pause, sévérités Nuclei) dans le panneau
+  d'exécution → passées à `/api/audit`. Validées côté serveur (rate_limit 1..1000,
+  pause 0..60, sévérités ⊆ {low,medium,high,critical}) ; `scan-web.sh` valide aussi
+  `NUCLEI_SEVERITES` par liste blanche. Les tags `dos/fuzz/intrusive/brute-force`
+  restent exclus EN DUR — aucune option ne peut rendre un scan offensif.
+
+Tests : validation des options côté serveur (sévérités/rate_limit invalides refusés
+avant tout scan). Suite complète : 8 fichiers, tous verts ; JS vérifié.
+
 ### Reste à faire (itérations futures)
 - Corriger le rapport d'audit `RAPPORT-tasko-defense.md` selon les remarques du
   critique (quelques formulations à nuancer).

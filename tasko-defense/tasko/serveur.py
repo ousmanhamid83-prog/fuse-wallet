@@ -117,13 +117,32 @@ def action_audit(corps: dict) -> dict:
 
     env = dict(os.environ)
     env["MANDAT"] = p
-    env["PAUSE"] = str(corps.get("pause", "2"))
     if ip:
         env["AUDIT_IP"] = ip
     if type_scan == "web" and corps.get("wpscan_token"):
         tok = str(corps["wpscan_token"])
         if _CIBLE_OK.match(tok):
             env["WPSCAN_API_TOKEN"] = tok
+
+    # --- options de scan SÛRES (validées ; ne réactivent rien de dangereux) ---
+    try:
+        pause = int(corps.get("pause", 2))
+        if not 0 <= pause <= 60:
+            return {"erreur": "pause hors bornes (0..60 s)"}
+        env["PAUSE"] = str(pause)
+        if "rate_limit" in corps and corps["rate_limit"] not in (None, ""):
+            rl = int(corps["rate_limit"])
+            if not 1 <= rl <= 1000:
+                return {"erreur": "rate_limit hors bornes (1..1000 req/s)"}
+            env["RATE_LIMIT"] = str(rl)
+    except (TypeError, ValueError):
+        return {"erreur": "pause/rate_limit doivent être des entiers"}
+    sev = corps.get("nuclei_severites")
+    if sev:
+        permis = {"low", "medium", "high", "critical"}
+        if not isinstance(sev, list) or not set(sev) <= permis:
+            return {"erreur": f"sévérités Nuclei invalides (permis : {', '.join(sorted(permis))})"}
+        env["NUCLEI_SEVERITES"] = ",".join(sev)
     try:
         proc = subprocess.run(
             ["bash", "audit-parc.sh", inv, type_scan],
